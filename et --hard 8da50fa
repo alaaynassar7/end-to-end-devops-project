@@ -1,0 +1,17 @@
+[33m5fa806e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m style: full cleanup and sync .gitignore
+[33m8da50fa[m Update azure-pipelines-infra.yml for Azure Pipelines
+[33m0baf991[m "refactor(infra/tools): stabilize EKS for Free Tier and bootstrap monitoring" -m "Technical Changes: - Adjusted instance_type to t3.micro for AWS Free Tier eligibility. - Scaled node group to 3 nodes to ensure memory availability for platform tools. - Fixed subnet tagging for EKS cluster discovery and NLB integration. - Configured Helm deployment with resource limits for ArgoCD and Datadog. - Standardized cluster naming across network and compute modules. - Added professional documentation headers to all pipeline and terraform files.
+[33m9c42d39[m "refactor(infra/tools): stabilize EKS for Free Tier and bootstrap monitoring" -m "Technical Changes: - Adjusted instance_type to t3.micro for AWS Free Tier eligibility. - Scaled node group to 3 nodes to ensure memory availability for platform tools. - Fixed subnet tagging for EKS cluster discovery and NLB integration. - Configured Helm deployment with resource limits for ArgoCD and Datadog. - Standardized cluster naming across network and compute modules. - Added professional documentation headers to all pipeline and terraform files."
+[33m3726e2e[m fix(infra): align cluster with free-tier and fix node connectivity
+[33m3eef4d7[m fix(network): update subnet tags to match EKS cluster name
+[33m06cc119[m Update azure-pipelines-tools.yml for Azure Pipelines
+[33mc9d60c9[m Update azure-pipelines-infra.yml for Azure Pipelines
+[33m8476bee[m Set up CI with Azure Pipelines
+[33m764215a[m Update azure-pipelines-infra.yml for Azure Pipelines
+[33m908e6e3[m Set up CI with Azure Pipelines
+[33m7026aef[m Delete azure-pipelines.yml
+[33m65cd61a[m Delete azure-pipelines-infra.yml
+[33m5bec069[m Set up CI with Azure Pipelines
+[33m426c124[m Add Motivational App code, Dockerfile, and Helm charts
+[33ma28e01c[m Set up CI with Azure Pipelines
+[33mfd03b31[m first commit
