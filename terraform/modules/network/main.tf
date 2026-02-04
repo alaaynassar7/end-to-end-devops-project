@@ -26,13 +26,11 @@ resource "aws_subnet" "public" {
 
   tags = {
     Name                     = "${var.project_name}-public-${count.index}"
-    "kubernetes.io/role/elb" = "1"
-    # Added cluster tag to public subnets for NLB discovery
-    "kubernetes.io/cluster/${var.project_name}-cluster" = "shared"
+    "kubernetes.io/role/elb" = "1" # Required for Public Load Balancers
   }
 }
 
-# --- NAT Gateway ---
+# --- NAT Gateway (Inside Public Subnet 0) ---
 resource "aws_eip" "nat" {
   domain = "vpc"
 }
@@ -53,7 +51,7 @@ resource "aws_subnet" "private" {
   tags = {
     Name                              = "${var.project_name}-private-${count.index}"
     "kubernetes.io/role/internal-elb" = "1"
-    # FIX: Dynamic Tag to match EKS Cluster Name exactly
+    # Dynamic tagging to match cluster name
     "kubernetes.io/cluster/${var.project_name}-cluster" = "shared"
   }
 }

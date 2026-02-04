@@ -11,13 +11,13 @@ tags = {
   project = "devops-final-project"
 }
 
-cluster_name    = "alaay-eks-cluster"
+cluster_name    = "alaay-final-cluster"
 cluster_version = "1.31"
 
-node_desired   = 2
-node_min       = 1
-node_max       = 3
-instance_types = ["t3.medium"]
+node_desired   = 3
+node_min       = 2
+node_max       = 4
+instance_types = ["t3.micro"]
 capacity_type  = "ON_DEMAND"
 
 domain_name    = "alaaynassar.com"

@@ -23,6 +23,12 @@ module "eks" {
   cluster_role_arn = module.iam.cluster_role_arn
   node_role_arn    = module.iam.node_role_arn
   private_subnets  = module.network.private_subnets_ids
+  
+  # Scaling & Instance configuration passed from root variables
+  node_desired     = var.node_desired
+  node_min         = var.node_min
+  node_max         = var.node_max
+  instance_types   = var.instance_types
 }
 
 # 4. Load Balancing: NLB and Target Groups
@@ -39,5 +45,6 @@ module "identity" {
   project_name = var.name_prefix
   domain_name  = var.domain_name
   nlb_dns_name = module.lb.nlb_dns_name
-  nlb_zone_id  = "Z26RNL4B79WM9H" # Fixed ID for NLB in us-east-1
+  # Fixed Zone ID for NLB in us-east-1
+  nlb_zone_id  = "Z26RNL4B79WM9H" 
 }

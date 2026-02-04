@@ -4,7 +4,7 @@ resource "aws_eks_cluster" "main" {
   role_arn = var.cluster_role_arn
 
   vpc_config {
-    subnet_ids = var.private_subnets
+    subnet_ids              = var.private_subnets
     endpoint_private_access = true
     endpoint_public_access  = true
   }
@@ -29,12 +29,16 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = var.private_subnets
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
+    desired_size = var.node_desired
+    max_size     = var.node_max
+    min_size     = var.node_min
   }
 
-  instance_types = ["t3.medium"]
+  instance_types = var.instance_types 
+  capacity_type  = "ON_DEMAND"
+  disk_size      = 20
 
-  capacity_type = "ON_DEMAND"
+  depends_on = [
+    aws_eks_cluster.main
+  ]
 }
