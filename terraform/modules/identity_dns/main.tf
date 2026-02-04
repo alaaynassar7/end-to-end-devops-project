@@ -4,17 +4,17 @@ resource "aws_route53_zone" "main" {
 }
 
 # --- Alias Record pointing to NLB ---
-resource "aws_route53_record" "nlb_alias" {
-  zone_id = aws_route53_zone.main.zone_id
-  name    = var.domain_name
-  type    = "A"
+#resource "aws_route53_record" "nlb_alias" {
+#  zone_id = aws_route53_zone.main.zone_id
+#  name    = var.domain_name
+#  type    = "A"
 
   #alias {
    # name                   = var.nlb_dns_name
    # zone_id                = var.nlb_zone_id
    # evaluate_target_health = true
   #}
-}
+#}
 
 # --- Cognito User Pool ---
 resource "aws_cognito_user_pool" "pool" {
