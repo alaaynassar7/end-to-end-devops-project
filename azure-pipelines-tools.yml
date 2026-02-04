@@ -10,16 +10,23 @@ pool:
 
 stages:
   - stage: DeployPlatform
-    displayName: "Deploy Platform Tools"
+    displayName: "Deploy Tools via Bash/Helm"
     jobs:
       - job: DeployTools
-        displayName: "Helm Bootstrap"
         steps:
           - checkout: self
 
-          # Fetch Cluster Name and VPC ID dynamically to update Kubeconfig
+          # 1. Install Helm CLI (In case it's not pre-installed)
+          - task: Bash@3
+            displayName: "Install Helm CLI"
+            inputs:
+              targetType: inline
+              script: |
+                curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # 2. Get Cluster Context and Update Kubeconfig
           - task: AWSShellScript@1
-            displayName: "Get Cluster Context"
+            displayName: "Connect to EKS Cluster"
             name: setup
             inputs:
               awsCredentials: $(AWS_SERVICE_CONNECTION)
@@ -27,57 +34,53 @@ stages:
               scriptType: inline
               inlineScript: |
                 set -euo pipefail
-                
-                # Dynamic discovery of existing EKS clusters
                 CLUSTER_NAME=$(aws eks list-clusters --query 'clusters[0]' --output text)
                 
                 if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-                  echo "Error: No EKS cluster found. Run Infra Pipeline Apply first."
+                  echo "Error: No EKS cluster found. Run Infra Apply first."
                   exit 1
                 fi
                 
-                # Extract VPC ID for future controller configurations
                 VPC_ID=$(aws eks describe-cluster --name $CLUSTER_NAME --query 'cluster.resourcesVpcConfig.vpcId' --output text)
-                
-                # Update local Kubeconfig to interact with the cluster
                 aws eks update-kubeconfig --region $(AWS_REGION) --name $CLUSTER_NAME
                 
-                # Pass variables to subsequent tasks in the pipeline
                 echo "##vso[task.setvariable variable=CLUSTER_NAME]$CLUSTER_NAME"
                 echo "##vso[task.setvariable variable=VPC_ID]$VPC_ID"
-                echo "Successfully connected to Cluster: $CLUSTER_NAME"
+                echo "Connected to: $CLUSTER_NAME"
 
-          # Use Bash to install multiple Helm charts as defined in the plan
-          - task: Bash@3
-            displayName: "Install Tools (Ingress, ArgoCD, Vault)"
+          # 3. Install Tools using Helm Commands directly
+          - task: AWSShellScript@1
+            displayName: "Install Helm Charts (Bootstrap)"
             inputs:
-              targetType: inline
-              script: |
+              awsCredentials: $(AWS_SERVICE_CONNECTION)
+              regionName: $(AWS_REGION)
+              scriptType: inline
+              inlineScript: |
                 set -euo pipefail
                 
-                # Register official Helm repositories
+                # Add Repos
                 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
                 helm repo add jetstack https://charts.jetstack.io
                 helm repo add argo https://argoproj.github.io/argo-helm
                 helm repo add hashicorp https://helm.releases.hashicorp.com
                 helm repo update
 
-                # Step 4: Install Ingress Controller (Link to NLB)
-                echo "Deploying Ingress Nginx..."
+                # Step 4.1: Install Ingress-Nginx
+                echo "Installing Ingress Nginx..."
                 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
                   --namespace ingress-nginx --create-namespace --wait
 
-                # Step 4: Install ArgoCD (GitOps Engine)
-                echo "Deploying ArgoCD..."
+                # Step 4.2: Install ArgoCD
+                echo "Installing ArgoCD..."
                 helm upgrade --install argocd argo/argo-cd \
                   --namespace argocd --create-namespace --wait
 
-                # Step 4: Install Cert-Manager (SSL Management)
-                echo "Deploying Cert-Manager..."
+                # Step 4.3: Install Cert-Manager
+                echo "Installing Cert-Manager..."
                 helm upgrade --install cert-manager jetstack/cert-manager \
                   --namespace cert-manager --create-namespace --set installCRDs=true
 
-                # Step 4: Install Hashicorp Vault (Secrets Management)
-                echo "Deploying Vault..."
+                # Step 4.4: Install Vault
+                echo "Installing Vault..."
                 helm upgrade --install vault hashicorp/vault \
                   --namespace vault --create-namespace
