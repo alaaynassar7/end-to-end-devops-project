@@ -1,0 +1,84 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: env
+    displayName: "Environment"
+    type: string
+    default: nonprod
+    values: [nonprod, prod]
+  - name: action
+    displayName: "Terraform Action"
+    type: string
+    default: plan
+    values:
+      - plan
+      - apply
+      - destroy
+
+variables:
+  TF_DIR: 'terraform'
+  AWS_REGION: 'us-east-1'
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: Infrastructure
+    displayName: "Terraform ${{ parameters.action }}"
+    jobs:
+      - job: TerraformJob
+        displayName: "Execute Terraform"
+        steps:
+          - checkout: self
+
+          # Install the latest version of Terraform CLI
+          - task: TerraformInstaller@1
+            displayName: "Install Terraform"
+            inputs:
+              terraformVersion: 'latest'
+
+          # Initialize Terraform and configure S3 Backend
+          - task: TerraformTaskV4@4
+            displayName: "Terraform Init"
+            inputs:
+              provider: 'aws'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/$(TF_DIR)'
+              backendServiceAWS: $(AWS_SERVICE_CONNECTION)
+              backendAWSBucketName: 'end-to-end-devops-project-bucket'
+              backendAWSKey: 'infra/terraform.tfstate'
+
+          # Execute Plan: Preview changes without applying
+          - ${{ if eq(parameters.action, 'plan') }}:
+            - task: TerraformTaskV4@4
+              displayName: "Terraform Plan"
+              inputs:
+                provider: 'aws'
+                command: 'plan'
+                workingDirectory: '$(System.DefaultWorkingDirectory)/$(TF_DIR)'
+                environmentServiceNameAWS: $(AWS_SERVICE_CONNECTION)
+                commandOptions: '-var-file="${{ parameters.env }}.tfvars"'
+
+          # Execute Apply: Provision the infrastructure
+          - ${{ if eq(parameters.action, 'apply') }}:
+            - task: TerraformTaskV4@4
+              displayName: "Terraform Apply"
+              inputs:
+                provider: 'aws'
+                command: 'apply'
+                workingDirectory: '$(System.DefaultWorkingDirectory)/$(TF_DIR)'
+                environmentServiceNameAWS: $(AWS_SERVICE_CONNECTION)
+                commandOptions: '-var-file="${{ parameters.env }}.tfvars" -auto-approve'
+
+          # Execute Destroy: Delete all managed resources (The Abdulrahman Trick)
+          - ${{ if eq(parameters.action, 'destroy') }}:
+            - task: TerraformTaskV4@4
+              displayName: "Terraform Destroy"
+              inputs:
+                provider: 'aws'
+                command: 'destroy'
+                workingDirectory: '$(System.DefaultWorkingDirectory)/$(TF_DIR)'
+                environmentServiceNameAWS: $(AWS_SERVICE_CONNECTION)
+                commandOptions: '-var-file="${{ parameters.env }}.tfvars" -auto-approve'
