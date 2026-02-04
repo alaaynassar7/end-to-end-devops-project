@@ -32,7 +32,17 @@ stages:
         steps:
           - checkout: self
 
-          # Using AWSShellScript instead of the missing TerraformTaskV4
+          # FIX: Manually install Terraform CLI because it's missing on the agent
+          - task: Bash@3
+            displayName: "Install Terraform CLI"
+            inputs:
+              targetType: inline
+              script: |
+                wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+                echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+                sudo apt update && sudo apt install terraform -y
+
+          # Execute Terraform using AWS Shell Script
           - task: AWSShellScript@1
             displayName: "Terraform Execution"
             inputs:
@@ -44,7 +54,6 @@ stages:
                 cd $(TF_DIR)
 
                 echo "Initializing Terraform..."
-                # Backend config via command line to avoid hardcoding
                 terraform init \
                   -backend-config="bucket=end-to-end-devops-project-bucket" \
                   -backend-config="key=infra/terraform.tfstate" \
