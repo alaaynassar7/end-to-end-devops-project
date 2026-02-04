@@ -32,19 +32,19 @@ module "eks" {
 }
 
 # 4. Load Balancing: NLB and Target Groups
-#module "lb" {
- # source         = "./modules/load_balancing"
- # project_name   = var.name_prefix
- # vpc_id         = module.network.vpc_id
- # public_subnets = module.network.public_subnets_ids
-#}
+module "lb" {
+  source         = "./modules/load_balancing"
+  project_name   = var.name_prefix
+  vpc_id         = module.network.vpc_id
+  public_subnets = module.network.public_subnets_ids
+}
 
 # 5. Identity & DNS: Route53 and Cognito
 module "identity" {
   source       = "./modules/identity_dns"
   project_name = var.name_prefix
   domain_name  = var.domain_name
-  nlb_dns_name = module.lb.nlb_dns_name
+  #nlb_dns_name = module.lb.nlb_dns_name
   # Fixed Zone ID for NLB in us-east-1
-  nlb_zone_id  = "Z26RNL4B79WM9H" 
+  #nlb_zone_id  = "Z26RNL4B79WM9H" 
 }
