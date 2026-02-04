@@ -1,3 +1,8 @@
+# ====================================================================
+# Outputs disabled because Load Balancer is disabled
+# ====================================================================
+
+/*
 output "nlb_arn" {
   value = aws_lb.main.arn
 }
@@ -13,3 +18,4 @@ output "http_tg_arn" {
 output "https_tg_arn" {
   value = aws_lb_target_group.https.arn
 }
+*/

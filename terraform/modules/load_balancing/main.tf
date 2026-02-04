@@ -1,10 +1,14 @@
-# --- Network Load Balancer ---
+# ====================================================================
+# NOTE: Load Balancer is disabled due to AWS Lab Account restrictions
+# (OperationNotPermitted: This AWS account currently does not support creating load balancers)
+# ====================================================================
+
+/*
 resource "aws_lb" "main" {
   name               = "${var.project_name}-nlb"
   internal           = false
   load_balancer_type = "network"
   subnets            = var.public_subnets
-
   enable_deletion_protection = false
 
   tags = {
@@ -12,13 +16,12 @@ resource "aws_lb" "main" {
   }
 }
 
-# --- Target Group for HTTP (Port 80) ---
 resource "aws_lb_target_group" "http" {
   name     = "${var.project_name}-http-tg"
   port     = 80
   protocol = "TCP"
   vpc_id   = var.vpc_id
-  target_type = "ip" # Required for integration with Nginx Ingress in EKS
+  target_type = "ip"
 
   health_check {
     enabled             = true
@@ -29,7 +32,6 @@ resource "aws_lb_target_group" "http" {
   }
 }
 
-# --- Target Group for HTTPS (Port 443) ---
 resource "aws_lb_target_group" "https" {
   name     = "${var.project_name}-https-tg"
   port     = 443
@@ -46,7 +48,6 @@ resource "aws_lb_target_group" "https" {
   }
 }
 
-# --- Listeners ---
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
@@ -68,3 +69,4 @@ resource "aws_lb_listener" "https" {
     target_group_arn = aws_lb_target_group.https.arn
   }
 }
+*/
