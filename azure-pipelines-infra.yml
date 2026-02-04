@@ -20,6 +20,7 @@ parameters:
 trigger:
 - main
 
+# Back to Azure-hosted Ubuntu 
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -31,40 +32,40 @@ variables:
 
 stages:
 - stage: Terraform_Lifecycle
-  displayName: "Infrastructure Management"
+  displayName: "Terraform Operations"
   jobs:
   - job: Terraform_Execution
-    displayName: "Execute Terraform Actions"
     steps:
     - checkout: self
 
-    # Using AWSShellScript instead of AWSCLI to allow full Bash scripts
-    - task: AWSShellScript@1
-      displayName: 'Terraform: Init, Plan & Execute'
+    # Using Bash to directly manage Terraform - Safest for your project
+    - task: Bash@3
+      displayName: 'Terraform Init, Plan & Action'
       inputs:
-        awsCredentials: $(SERVICE_CONNECTION_NAME)
-        regionName: $(AWS_REGION)
-        scriptType: 'inline'
-        inlineScript: |
+        targetType: 'inline'
+        script: |
           set -e
-          # 1. Install Terraform binary
+          # 1. Install Terraform on the hosted agent
           sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
           wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt-get update && sudo apt-get install terraform
 
-          # 2. Terraform Initialization
+          # 2. Terraform Init (S3 Backend)
+          # Note: We use the connection variables provided by AWS Shell but manually configured for Bash
           terraform init \
             -backend-config="bucket=end-to-end-devops-project-bucket" \
             -backend-config="key=infra/terraform.tfstate" \
             -backend-config="region=$(AWS_REGION)"
 
           # 3. Terraform Plan
-          echo "Running Plan for ${{ parameters.environment }} environment..."
           terraform plan -var-file="${{ parameters.environment }}.tfvars"
 
-          # 4. Terraform Action (Apply/Destroy)
+          # 4. Terraform Apply/Destroy
           if [ "${{ parameters.terraform_action }}" != "plan" ]; then
-            echo "Executing ${{ parameters.terraform_action }} on ${{ parameters.environment }}..."
             terraform ${{ parameters.terraform_action }} -var-file="${{ parameters.environment }}.tfvars" -auto-approve
           fi
+      env:
+        # These come from your Service Connection (alaa-aws)
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
