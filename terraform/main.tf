@@ -32,12 +32,12 @@ module "eks" {
 }
 
 # 4. Load Balancing: NLB and Target Groups
-module "lb" {
-  source         = "./modules/load_balancing"
-  project_name   = var.name_prefix
-  vpc_id         = module.network.vpc_id
-  public_subnets = module.network.public_subnets_ids
-}
+#module "lb" {
+ # source         = "./modules/load_balancing"
+ # project_name   = var.name_prefix
+ # vpc_id         = module.network.vpc_id
+ # public_subnets = module.network.public_subnets_ids
+#}
 
 # 5. Identity & DNS: Route53 and Cognito
 module "identity" {
