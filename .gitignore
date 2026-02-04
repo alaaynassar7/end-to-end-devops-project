@@ -1,4 +1,9 @@
-# Terraform
+# ====================================================================
+# Terraform & Binaries
+# ====================================================================
+terraform
+terraform.exe
+terraform_*.zip
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
@@ -20,13 +25,17 @@ tfplan
 !nonprod.tfvars
 !prod.tfvars
 
+# ====================================================================
 # AWS Credentials & Keys
+# ====================================================================
 .aws/
 *.pem
 *.key
 *.ppk
 
+# ====================================================================
 # IDE & Editors
+# ====================================================================
 .vscode/
 .idea/
 *.swp
@@ -36,39 +45,23 @@ tfplan
 .classpath
 .settings/
 
+# ====================================================================
 # OS Files
+# ====================================================================
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Logs
-*.log
-destroy.log
-
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# Helm
-charts/*.tgz
-requirements.lock
-
-# Kubernetes
-kubeconfig
-*.kubeconfig
-kube_config_*
-
-# Docker
-.dockerignore
-
-# Node modules (for voting app)
+# ====================================================================
+# Development & Frameworks (Voting/Worker Apps)
+# ====================================================================
+# Node modules
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Python (for voting app)
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -78,25 +71,37 @@ venv/
 env/
 ENV/
 
-# .NET (for worker app)
+# .NET
 bin/
 obj/
 *.dll
 *.exe
 *.pdb
 
-# Temporary files
+# ====================================================================
+# DevOps Tools (Kubernetes, Helm, Docker)
+# ====================================================================
+kubeconfig
+*.kubeconfig
+kube_config_*
+charts/*.tgz
+requirements.lock
+.dockerignore
+.azure-pipelines/
+
+# ====================================================================
+# Logs, Secrets & Temp Files
+# ====================================================================
+*.log
+destroy.log
+.env
+.env.local
+.env.*.local
 *.tmp
 *.temp
 *.bak
 *.backup
-*~
 .cache/
-
-# Azure DevOps
-.azure-pipelines/
-
-# Secrets & Sensitive Data
 secrets/
 *.secret
 vault-keys.txt
