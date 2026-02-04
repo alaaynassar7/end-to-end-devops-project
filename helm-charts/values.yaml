@@ -1,0 +1,55 @@
+# Default values for motivational-app.
+# This aligns with your Revised Abstracted Infra, CI & CD Plan.
+
+replicaCount: 2
+
+image:
+  # Using your Docker Hub repository
+  repository: alaaynassar7/motivational-app
+  pullPolicy: IfNotPresent
+  # Tag will be updated by the CI Pipeline, v1.0.0 is the baseline
+  tag: "v1.0.0"
+
+service:
+  type: ClusterIP
+  port: 80
+  # Flask default port inside the container
+  targetPort: 5000 
+
+ingress:
+  # Essential for Step 12 in your Plan (Traffic Flow)
+  enabled: true
+  className: "nginx"
+  annotations:
+    # Connects to the pre-provisioned NLB via Nginx Ingress Controller
+    kubernetes.io/ingress.class: nginx
+    # Matches Step 4 in your Tooling Pipeline (cert-manager)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: app.alaaynassar.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+# Probes for health checks (matches Step 3 cluster verification)
+livenessProbe:
+  httpGet:
+    path: /
+    port: 5000
+readinessProbe:
+  httpGet:
+    path: /
+    port: 5000
+
+# Resource limits to keep the cluster healthy
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Set to true for auto-scaling later if needed
+autoscaling:
+  enabled: false

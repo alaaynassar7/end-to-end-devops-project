@@ -1,0 +1,14 @@
+apiVersion: v2
+name: motivational-app
+description: Helm chart for the Motivational Flask Application
+type: application
+
+# This is the chart version (changes when you change the helm configuration)
+version: 1.0.0
+
+# This is the app version (changes when you update your Python code/Docker image)
+appVersion: "1.0.0"
+
+maintainers:
+  - name: Alaa Nassar
+    email: alaaynassar7@gmail.com
