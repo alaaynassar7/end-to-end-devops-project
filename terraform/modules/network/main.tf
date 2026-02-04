@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "${var.project_name}-vpc"
+    Name        = "${var.project_name}-vpc"
     Environment = var.environment
   }
 }
@@ -26,11 +26,13 @@ resource "aws_subnet" "public" {
 
   tags = {
     Name                     = "${var.project_name}-public-${count.index}"
-    "kubernetes.io/role/elb" = "1" # مهم جداً للـ NLB
+    "kubernetes.io/role/elb" = "1"
+    # Added cluster tag to public subnets for NLB discovery
+    "kubernetes.io/cluster/${var.project_name}-cluster" = "shared"
   }
 }
 
-# --- NAT Gateway (Inside Public Subnet 0) ---
+# --- NAT Gateway ---
 resource "aws_eip" "nat" {
   domain = "vpc"
 }
@@ -51,7 +53,8 @@ resource "aws_subnet" "private" {
   tags = {
     Name                              = "${var.project_name}-private-${count.index}"
     "kubernetes.io/role/internal-elb" = "1"
-    "kubernetes.io/cluster/final-eks" = "shared" # استبدلي final-eks باسم الكلاستر لاحقاً
+    # FIX: Dynamic Tag to match EKS Cluster Name exactly
+    "kubernetes.io/cluster/${var.project_name}-cluster" = "shared"
   }
 }
 
