@@ -1,76 +1,74 @@
-trigger: none
-pr: none
+# ======================================================================================
+# Description: Final Infrastructure Pipeline (Using 'alaa-aws' Service Connection)
+# Phase: Terraform Provisioning (VPC, EKS, NLB, Route53, Cognito)
+# Parameters: Environment (nonprod/prod) and Action (plan/apply/destroy)
+# ======================================================================================
 
 parameters:
-  - name: env
-    displayName: "Environment"
-    type: string
-    default: nonprod
-    values: [nonprod, prod]
-  - name: action
-    displayName: "Terraform Action"
-    type: string
-    default: plan
-    values:
-      - plan
-      - apply
-      - destroy
+- name: environment
+  displayName: "Environment"
+  type: string
+  default: nonprod
+  values:
+  - nonprod
+  - prod
 
-variables:
-  TF_DIR: 'terraform'
-  AWS_REGION: 'us-east-1'
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
+- name: terraform_action
+  displayName: "Terraform Action"
+  type: string
+  default: apply
+  values:
+  - plan
+  - apply
+  - destroy
+
+trigger:
+- main
 
 pool:
   vmImage: 'ubuntu-latest'
 
+variables:
+  - name: AWS_REGION
+    value: 'us-east-1'
+  - name: SERVICE_CONNECTION_NAME
+    value: 'alaa-aws' # Updated to match your Service Connection name
+
 stages:
-  - stage: Infrastructure
-    displayName: "Terraform ${{ parameters.action }}"
-    jobs:
-      - job: TerraformJob
-        steps:
-          - checkout: self
+- stage: Terraform_Lifecycle
+  displayName: "Infrastructure Management"
+  jobs:
+  - job: Terraform_Execution
+    displayName: "Execute Terraform Actions"
+    steps:
+    - checkout: self
 
-          # FIX: Manually install Terraform CLI because it's missing on the agent
-          - task: Bash@3
-            displayName: "Install Terraform CLI"
-            inputs:
-              targetType: inline
-              script: |
-                wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-                echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-                sudo apt update && sudo apt install terraform -y
+    # Bridges the 'alaa-aws' Service Connection to the Bash script
+    - task: AWSCLI@1
+      displayName: 'Terraform: Init, Plan & Execute'
+      inputs:
+        awsCredentials: $(SERVICE_CONNECTION_NAME)
+        regionName: $(AWS_REGION)
+        inlineScript: |
+          set -e
+          # 1. Install Terraform binary (Bypassing external Task dependencies)
+          sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+          wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update && sudo apt-get install terraform
 
-          # Execute Terraform using AWS Shell Script
-          - task: AWSShellScript@1
-            displayName: "Terraform Execution"
-            inputs:
-              awsCredentials: $(AWS_SERVICE_CONNECTION)
-              regionName: $(AWS_REGION)
-              scriptType: inline
-              inlineScript: |
-                set -euo pipefail
-                cd $(TF_DIR)
+          # 2. Terraform Initialization (Linked to S3 Backend)
+          terraform init \
+            -backend-config="bucket=end-to-end-devops-project-bucket" \
+            -backend-config="key=infra/terraform.tfstate" \
+            -backend-config="region=$(AWS_REGION)"
 
-                echo "Initializing Terraform..."
-                terraform init \
-                  -backend-config="bucket=end-to-end-devops-project-bucket" \
-                  -backend-config="key=infra/terraform.tfstate" \
-                  -backend-config="region=$(AWS_REGION)"
+          # 3. Terraform Plan
+          echo "Running Plan for ${{ parameters.environment }} environment..."
+          terraform plan -var-file="${{ parameters.environment }}.tfvars"
 
-                # Logic for Plan
-                if [ "${{ parameters.action }}" == "plan" ]; then
-                  echo "Running Terraform Plan..."
-                  terraform plan -var-file="${{ parameters.env }}.tfvars"
-                
-                # Logic for Apply
-                elif [ "${{ parameters.action }}" == "apply" ]; then
-                  echo "Running Terraform Apply..."
-                  terraform apply -var-file="${{ parameters.env }}.tfvars" -auto-approve
-                
-                # Logic for Destroy
-                elif [ "${{ parameters.action }}" == "destroy" ]; then
-                  echo "Running Terraform Destroy..."
-                  terraform destroy -var-file="${{ parameters.env }}.tfvars" -auto-approve
-                fi
+          # 4. Terraform Action (Apply/Destroy)
+          if [ "${{ parameters.terraform_action }}" != "plan" ]; then
+            echo "Executing ${{ parameters.terraform_action }} on ${{ parameters.environment }}..."
+            terraform ${{ parameters.terraform_action }} -var-file="${{ parameters.environment }}.tfvars" -auto-approve
+          fi
