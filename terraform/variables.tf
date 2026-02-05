@@ -71,3 +71,10 @@ variable "ingress_controller_policy_arn" {
   description = "ARN of the IAM policy for the AWS Load Balancer Controller"
   type        = string
 }
+
+# --- Added Variable for API Gateway Integration ---
+variable "load_balancer_arn" {
+  description = "The ARN of the load balancer (passed from K8s ingress later)"
+  type        = string
+  default     = "" # Initialized as empty for now
+}
