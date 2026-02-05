@@ -1,17 +1,11 @@
-# Use professional lightweight image
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install dependencies directly to keep it simple for now
-RUN pip install --no-cache-dir flask gunicorn
+COPY requirements.txt .
 
-# Copy application code
-COPY app.py .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port
-EXPOSE 5000
+COPY . .
 
-# Run with Gunicorn for production standard
 CMD ["gunicorn", "--timeout", "120", "--bind", "0.0.0.0:5000", "app:app"]
