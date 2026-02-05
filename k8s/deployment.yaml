@@ -15,11 +15,11 @@ spec:
     spec:
       containers:
       - name: motivational-app
-        # REPLACE THIS with your specific ECR Image URI from the build logs
+        # Image URI from your ECR (ensure this matches your repository)
         image: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-app-repo:latest
         imagePullPolicy: Always # Ensure the latest image is always pulled
         ports:
-        - containerPort: 3000 # The internal port the application listens on
+        - containerPort: 5000 # CORRECTED: App runs on port 5000 (Flask default), not 3000
 ---
 apiVersion: v1
 kind: Service
@@ -34,5 +34,5 @@ spec:
   ports:
     - protocol: TCP
       port: 80         # The port exposed by the service internally
-      targetPort: 3000 # The target port on the container
+      targetPort: 5000 # CORRECTED: Must match the containerPort (5000)
       nodePort: 30007  # The static port to access the app externally
