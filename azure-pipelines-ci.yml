@@ -1,0 +1,59 @@
+trigger:
+- main # Triggers the pipeline on push to the main branch
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # AWS Service Connection Name
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  # AWS Region
+  AWS_REGION: 'us-east-1'
+  # ECR Repository Name (Created by Terraform)
+  ECR_REPOSITORY_NAME: 'alaa-devops-project-app-repo'
+  # Image Tag (Uses the Build ID to generate a unique tag every time)
+  IMAGE_TAG: '$(Build.BuildId)'
+
+steps:
+# 1. Checkout Code
+- checkout: self
+
+# 2. Login to AWS ECR
+# We use the AWS CLI to authenticate Docker with your private ECR registry
+- task: AWSShellScript@1
+  displayName: 'Login to AWS ECR'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      echo "Logging in to Amazon ECR..."
+      aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$(AWS_REGION).amazonaws.com
+
+# 3. Build and Push Docker Image
+# This step builds the image from the Dockerfile and pushes it to ECR
+- task: AWSShellScript@1
+  displayName: 'Build and Push Docker Image'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      # Define the full repository URL
+      ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      REPO_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME"
+      
+      echo "Building Docker Image: $REPO_URL:$IMAGE_TAG"
+      
+      # Build the image
+      docker build -t $REPO_URL:$IMAGE_TAG .
+      # Tag it also as 'latest' for convenience
+      docker tag $REPO_URL:$IMAGE_TAG $REPO_URL:latest
+
+      echo "Pushing Docker Image to ECR..."
+      # Push both the unique tag and latest
+      docker push $REPO_URL:$IMAGE_TAG
+      docker push $REPO_URL:latest
+
+      echo "Image pushed successfully!"
+      echo "Image URI: $REPO_URL:$IMAGE_TAG"
