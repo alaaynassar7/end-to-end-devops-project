@@ -1,6 +1,5 @@
 
-
-# --- Infrastructure Pipeline (Terraform Plan/Apply/Destroy) ---
+# --- Infrastructure Pipeline (Powered by AWS CLI Task) ---
 name: $(Date:yyyyMMdd)$(Rev:.r)-Infra
 
 parameters:
@@ -26,12 +25,11 @@ trigger: none
 pool:
   vmImage: 'ubuntu-latest'
 
+
 variables:
 - group: terraform-backend-vars # Must contain: S3_BUCKET_NAME, AWS_REGION
-- name: TF_IN_AUTOMATION
-  value: "true"
 - name: TERRAFORM_VERSION
-  value: "1.5.7" # Matching your local version
+  value: "1.5.7"
 
 stages:
 - stage: Terraform_Work
@@ -39,42 +37,62 @@ stages:
   jobs:
   - job: Terraform_Execution
     steps:
-    # 1. Install Terraform (Safety step)
+    # 1. Install Terraform (This puts terraform in the PATH)
     - task: TerraformInstaller@1
       displayName: 'Install Terraform $(TERRAFORM_VERSION)'
       inputs:
         terraformVersion: '$(TERRAFORM_VERSION)'
 
-    # 2. Init: Connects to S3 Backend dynamically
-    - script: |
-        echo "Initializing Terraform for ${{ parameters.environment }}..."
-        terraform init \
-          -backend-config="bucket=$(S3_BUCKET_NAME)" \
-          -backend-config="key=${{ parameters.environment }}/terraform.tfstate" \
-          -backend-config="region=$(AWS_REGION)"
+    # 2. Init (Wrapped in AWS CLI to handle Auth)
+    - task: AWSCLI@1
       displayName: 'Terraform Init'
-      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+      inputs:
+        awsCredentials: 'alaa-aws' # This injects the credentials automatically!
+        regionName: '$(AWS_REGION)'
+        scriptType: 'bash'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        inlineScript: |
+          echo "Initializing Terraform..."
+          terraform init \
+            -backend-config="bucket=$(S3_BUCKET_NAME)" \
+            -backend-config="key=${{ parameters.environment }}/terraform.tfstate" \
+            -backend-config="region=$(AWS_REGION)"
 
-    # 3. Plan: Runs for 'plan' OR 'apply' actions
-    - script: |
-        echo "Running Terraform Plan..."
-        terraform plan -var-file="${{ parameters.environment }}.tfvars" -out=tfplan
+    # 3. Plan (Wrapped in AWS CLI)
+    - task: AWSCLI@1
       displayName: 'Terraform Plan'
       condition: ne('${{ parameters.action }}', 'destroy')
-      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+      inputs:
+        awsCredentials: 'alaa-aws'
+        regionName: '$(AWS_REGION)'
+        scriptType: 'bash'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        inlineScript: |
+          echo "Running Terraform Plan..."
+          terraform plan -var-file="${{ parameters.environment }}.tfvars" -out=tfplan
 
-    # 4. Apply: Only runs if user selected 'apply'
-    - script: |
-        echo "APPLYING Infrastructure changes..."
-        terraform apply -auto-approve tfplan
+    # 4. Apply (Wrapped in AWS CLI)
+    - task: AWSCLI@1
       displayName: 'Terraform Apply'
       condition: eq('${{ parameters.action }}', 'apply')
-      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+      inputs:
+        awsCredentials: 'alaa-aws'
+        regionName: '$(AWS_REGION)'
+        scriptType: 'bash'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        inlineScript: |
+          echo "Applying Changes..."
+          terraform apply -auto-approve tfplan
 
-    # 5. Destroy: Only runs if user selected 'destroy'
-    - script: |
-        echo "DESTROYING Infrastructure..."
-        terraform destroy -var-file="${{ parameters.environment }}.tfvars" -auto-approve
+    # 5. Destroy (Wrapped in AWS CLI)
+    - task: AWSCLI@1
       displayName: 'Terraform Destroy'
       condition: eq('${{ parameters.action }}', 'destroy')
-      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+      inputs:
+        awsCredentials: 'alaa-aws'
+        regionName: '$(AWS_REGION)'
+        scriptType: 'bash'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        inlineScript: |
+          echo "DESTROYING Resources..."
+          terraform destroy -var-file="${{ parameters.environment }}.tfvars" -auto-approve
