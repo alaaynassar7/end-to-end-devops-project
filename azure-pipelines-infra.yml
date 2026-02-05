@@ -27,6 +27,8 @@ variables:
   WORKING_DIR: 'terraform'
   BUCKET_NAME: 'end-to-end-devops-project-bucket'
   REGION: 'us-east-1'
+  # Mapping parameters to variables to use them in conditions safely
+  ACTION_VALUE: ${{ parameters.terraformAction }}
   ${{ if eq(parameters.environment, 'prod') }}:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
@@ -58,10 +60,10 @@ stages:
             -backend-config="key=$(STATE_KEY)" \
             -backend-config="region=$(REGION)"
 
-    # Fixed conditions using pipeline.parameters
+    # Using variables instead of parameters in conditions
     - task: AWSShellScript@1
       displayName: 'Terraform Plan Only'
-      condition: eq(pipeline.parameters.terraformAction, 'plan')
+      condition: eq(variables['ACTION_VALUE'], 'plan')
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
@@ -72,7 +74,7 @@ stages:
 
     - task: AWSShellScript@1
       displayName: 'Terraform Full Deployment (Plan & Apply)'
-      condition: eq(pipeline.parameters.terraformAction, 'apply')
+      condition: eq(variables['ACTION_VALUE'], 'apply')
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
@@ -84,7 +86,7 @@ stages:
 
     - task: AWSShellScript@1
       displayName: 'Terraform Destroy'
-      condition: eq(pipeline.parameters.terraformAction, 'destroy')
+      condition: eq(variables['ACTION_VALUE'], 'destroy')
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
