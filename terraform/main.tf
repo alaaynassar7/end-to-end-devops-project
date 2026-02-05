@@ -55,14 +55,11 @@ module "security" {
 module "api_gateway" {
   source             = "./modules/api-gateway"
   project_name       = var.project_name
-  private_subnet_ids  = module.network.private_subnets # Ensure this is a list of IDs
   
-  # FIX: Pass the Security Group ID from the network module, NOT the vpc_id
-  security_group_id   = module.network.default_security_group_id 
+  private_subnet_ids = module.network.private_subnet_ids 
   
-  # Note: If your load_balancer_arn comes from a resource not yet created, 
-  # ensure it's passed correctly here.
-  load_balancer_arn   = var.load_balancer_arn 
+  security_group_id  = module.network.security_group_id 
   
+  load_balancer_arn  = var.load_balancer_arn
   tags               = var.tags
 }
