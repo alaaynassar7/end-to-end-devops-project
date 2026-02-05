@@ -4,7 +4,7 @@ metadata:
   name: motivational-app
   namespace: default
 spec:
-  replicas: 1 # Number of desired pods
+  replicas: 1
   selector:
     matchLabels:
       app: motivational-app
@@ -15,11 +15,11 @@ spec:
     spec:
       containers:
       - name: motivational-app
-        # Image URI from your ECR (ensure this matches your repository)
+        # Replace with your actual ECR image URI
         image: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-app-repo:latest
-        imagePullPolicy: Always # Ensure the latest image is always pulled
+        imagePullPolicy: Always
         ports:
-        - containerPort: 5000 # CORRECTED: App runs on port 5000 (Flask default), not 3000
+        - containerPort: 5000 # Application runs on port 5000 (Flask)
 ---
 apiVersion: v1
 kind: Service
@@ -27,12 +27,11 @@ metadata:
   name: motivational-service
   namespace: default
 spec:
-  # Using NodePort to expose the app since LoadBalancers are restricted
-  type: NodePort
+  # Using LoadBalancer to provision an AWS ELB for external access
+  type: LoadBalancer
   selector:
     app: motivational-app
   ports:
     - protocol: TCP
-      port: 80         # The port exposed by the service internally
-      targetPort: 5000 # CORRECTED: Must match the containerPort (5000)
-      nodePort: 30007  # The static port to access the app externally
+      port: 80         # External port (HTTP)
+      targetPort: 5000 # Internal container port
