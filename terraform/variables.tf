@@ -46,7 +46,7 @@ variable "kubernetes_version" {
 variable "instance_types" {
   description = "EC2 instance types for the EKS worker nodes"
   type        = list(string)
-  default     = ["t3.micro"]
+  default     = ["t3.small"]
 }
 
 variable "desired_capacity" {

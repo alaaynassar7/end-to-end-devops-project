@@ -15,7 +15,7 @@ public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 private_cidrs = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 
 # --- EKS Compute Configuration ---
-instance_types   = ["t3.micro"] # Optimized for budget/Free Tier
+instance_types = ["t3.small"]  # Optimized for budget/Free Tier
 desired_capacity = 2
 min_capacity     = 1
 max_capacity     = 3
