@@ -27,7 +27,6 @@ variables:
   WORKING_DIR: 'terraform'
   BUCKET_NAME: 'end-to-end-devops-project-bucket'
   REGION: 'us-east-1'
-  # Set variables based on environment selection
   ${{ if eq(parameters.environment, 'prod') }}:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
@@ -41,39 +40,55 @@ stages:
   jobs:
   - job: TerraformJob
     steps:
-    # 1. Install Terraform (Reliable task)
     - task: TerraformInstaller@1
       displayName: 'Install Terraform'
       inputs:
         terraformVersion: 'latest'
 
-    # 2. Terraform Init, Plan, and Action using AWS CLI for Authentication
     - task: AWSShellScript@1
-      displayName: 'Run Terraform Commands'
+      displayName: 'Terraform Init'
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
         scriptType: 'inline'
         inlineScript: |
           cd $(WORKING_DIR)
-          
-          echo "Initializing Terraform for $(parameters.environment)..."
           terraform init \
             -backend-config="bucket=$(BUCKET_NAME)" \
             -backend-config="key=$(STATE_KEY)" \
             -backend-config="region=$(REGION)"
-          
-          echo "Running Terraform Plan..."
+
+    # Fixed conditions using pipeline.parameters
+    - task: AWSShellScript@1
+      displayName: 'Terraform Plan Only'
+      condition: eq(pipeline.parameters.terraformAction, 'plan')
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
           terraform plan -var-file="$(VAR_FILE)"
 
-          # Execute Apply if selected
-          if [ "$(parameters.terraformAction)" == "apply" ]; then
-            echo "Executing Terraform Apply..."
-            terraform apply -var-file="$(VAR_FILE)" -auto-approve
-          fi
+    - task: AWSShellScript@1
+      displayName: 'Terraform Full Deployment (Plan & Apply)'
+      condition: eq(pipeline.parameters.terraformAction, 'apply')
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
+          terraform plan -var-file="$(VAR_FILE)"
+          terraform apply -var-file="$(VAR_FILE)" -auto-approve
 
-          # Execute Destroy if selected
-          if [ "$(parameters.terraformAction)" == "destroy" ]; then
-            echo "Executing Terraform Destroy..."
-            terraform destroy -var-file="$(VAR_FILE)" -auto-approve
-          fi
+    - task: AWSShellScript@1
+      displayName: 'Terraform Destroy'
+      condition: eq(pipeline.parameters.terraformAction, 'destroy')
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
+          terraform destroy -var-file="$(VAR_FILE)" -auto-approve
