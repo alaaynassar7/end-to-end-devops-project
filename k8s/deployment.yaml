@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: motivational-app
+  namespace: default
+spec:
+  replicas: 1 # Number of desired pods
+  selector:
+    matchLabels:
+      app: motivational-app
+  template:
+    metadata:
+      labels:
+        app: motivational-app
+    spec:
+      containers:
+      - name: motivational-app
+        # REPLACE THIS with your specific ECR Image URI from the build logs
+        image: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-app-repo:latest
+        imagePullPolicy: Always # Ensure the latest image is always pulled
+        ports:
+        - containerPort: 3000 # The internal port the application listens on
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: motivational-service
+  namespace: default
+spec:
+  # Using NodePort to expose the app since LoadBalancers are restricted
+  type: NodePort
+  selector:
+    app: motivational-app
+  ports:
+    - protocol: TCP
+      port: 80         # The port exposed by the service internally
+      targetPort: 3000 # The target port on the container
+      nodePort: 30007  # The static port to access the app externally

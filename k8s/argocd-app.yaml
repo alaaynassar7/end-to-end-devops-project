@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: motivational-app-argo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/alaaynassar7/end-to-end-devops-project.git' # Your GitHub Repository URL
+    targetRevision: main
+    path: k8s # Path to the directory containing Kubernetes manifests
+  destination:
+    server: 'https://kubernetes.default.svc' # The internal API server address
+    namespace: default # The namespace where the app will be deployed
+  syncPolicy:
+    automated:
+      prune: true # Automatically delete resources that are removed from Git
+      selfHeal: true # Automatically fix resources if they drift from Git state
