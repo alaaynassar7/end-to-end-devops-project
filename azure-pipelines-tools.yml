@@ -1,86 +1,68 @@
-trigger: none
-pr: none
-
-variables:
-  AWS_REGION: 'us-east-1'
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
+trigger: none # Manual trigger only
 
 pool:
   vmImage: 'ubuntu-latest'
 
-stages:
-  - stage: DeployPlatform
-    displayName: "Deploy Tools via Bash/Helm"
-    jobs:
-      - job: DeployTools
-        steps:
-          - checkout: self
+variables:
+  # Replace with your actual AWS Service Connection name in Azure DevOps
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  REGION: 'us-east-1'
+  # Ensure this matches your EKS cluster name created by Terraform
+  CLUSTER_NAME: 'alaa-devops-project-cluster'
 
-          # 1. Install Helm CLI (In case it's not pre-installed)
-          - task: Bash@3
-            displayName: "Install Helm CLI"
-            inputs:
-              targetType: inline
-              script: |
-                curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+steps:
+# Step 1: Checkout the repository
+- checkout: self
 
-          # 2. Get Cluster Context and Update Kubeconfig
-          - task: AWSShellScript@1
-            displayName: "Connect to EKS Cluster"
-            name: setup
-            inputs:
-              awsCredentials: $(AWS_SERVICE_CONNECTION)
-              regionName: $(AWS_REGION)
-              scriptType: inline
-              inlineScript: |
-                set -euo pipefail
-                CLUSTER_NAME=$(aws eks list-clusters --query 'clusters[0]' --output text)
-                
-                if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-                  echo "Error: No EKS cluster found. Run Infra Apply first."
-                  exit 1
-                fi
-                
-                VPC_ID=$(aws eks describe-cluster --name $CLUSTER_NAME --query 'cluster.resourcesVpcConfig.vpcId' --output text)
-                aws eks update-kubeconfig --region $(AWS_REGION) --name $CLUSTER_NAME
-                
-                echo "##vso[task.setvariable variable=CLUSTER_NAME]$CLUSTER_NAME"
-                echo "##vso[task.setvariable variable=VPC_ID]$VPC_ID"
-                echo "Connected to: $CLUSTER_NAME"
+# Step 2: Install Helm and Kubectl (Required for deploying charts)
+- task: HelmInstaller@0
+  displayName: 'Install Helm'
+  inputs:
+    helmVersion: 'latest'
+    installKubectl: true
 
-          # 3. Install Tools using Helm Commands directly
-          - task: AWSShellScript@1
-            displayName: "Install Helm Charts (Bootstrap)"
-            inputs:
-              awsCredentials: $(AWS_SERVICE_CONNECTION)
-              regionName: $(AWS_REGION)
-              scriptType: inline
-              inlineScript: |
-                set -euo pipefail
-                
-                # Add Repos
-                helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-                helm repo add jetstack https://charts.jetstack.io
-                helm repo add argo https://argoproj.github.io/argo-helm
-                helm repo add hashicorp https://helm.releases.hashicorp.com
-                helm repo update
+# Step 3: Configure Cluster Access and Install Tools
+- task: AWSShellScript@1
+  displayName: 'Helm Installs: Nginx, ArgoCD'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      echo "--- Step 1: Update Kubeconfig ---"
+      # Retrieve kubeconfig to allow kubectl to interact with the EKS cluster
+      aws eks update-kubeconfig --region $(REGION) --name $(CLUSTER_NAME)
+      
+      # Verify connectivity by listing nodes
+      kubectl get nodes
 
-                # Step 4.1: Install Ingress-Nginx
-                echo "Installing Ingress Nginx..."
-                helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-                  --namespace ingress-nginx --create-namespace --wait
+      echo "--- Step 2: Install Ingress-Nginx Controller ---"
+      # Add the official Ingress-Nginx Helm repository
+      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      helm repo update
 
-                # Step 4.2: Install ArgoCD
-                echo "Installing ArgoCD..."
-                helm upgrade --install argocd argo/argo-cd \
-                  --namespace argocd --create-namespace --wait
+      # Install Ingress-Nginx.
+      # The annotation ensures an AWS Network Load Balancer (NLB) is provisioned.
+      helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+        --namespace ingress-nginx --create-namespace \
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+        --wait
 
-                # Step 4.3: Install Cert-Manager
-                echo "Installing Cert-Manager..."
-                helm upgrade --install cert-manager jetstack/cert-manager \
-                  --namespace cert-manager --create-namespace --set installCRDs=true
+      echo "--- Step 3: Install Argo CD ---"
+      # Create a namespace for Argo CD if it doesn't exist
+      kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Apply the official Argo CD install manifest
+      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+      
+      echo "Waiting for Argo CD server to be ready..."
+      # Wait up to 5 minutes for the Argo CD server pod to be available
+      kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 
-                # Step 4.4: Install Vault
-                echo "Installing Vault..."
-                helm upgrade --install vault hashicorp/vault \
-                  --namespace vault --create-namespace
+      echo "--- Installation Complete ---"
+
+      echo "--- OUTPUT: Load Balancer Hostname ---"
+      # Retrieve and print the Load Balancer DNS name.
+      # You will need to copy this value for your Terraform 'load_balancer_arn' variable later.
+      kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+      echo "" # Print a new line
