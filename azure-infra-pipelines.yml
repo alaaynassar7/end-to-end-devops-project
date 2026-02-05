@@ -1,0 +1,78 @@
+# --- Infrastructure Pipeline (Terraform Plan/Apply/Destroy) ---
+name: $(Date:yyyyMMdd)$(Rev:.r)-Infra
+
+parameters:
+- name: environment
+  displayName: "Target Environment"
+  type: string
+  default: nonprod
+  values:
+  - nonprod
+  - prod
+
+- name: action
+  displayName: "Terraform Action"
+  type: string
+  default: plan
+  values:
+  - plan
+  - apply
+  - destroy
+
+trigger: none # Manual trigger is recommended for Infra
+
+pool:
+  name: 'queue-Alaa' # Your Self-Hosted Agent on VMware
+
+variables:
+- group: terraform-backend-vars # Must contain: S3_BUCKET_NAME, AWS_REGION
+- name: TF_IN_AUTOMATION
+  value: "true"
+- name: TERRAFORM_VERSION
+  value: "1.5.7" # Matching your local version
+
+stages:
+- stage: Terraform_Work
+  displayName: 'Terraform: ${{ parameters.action }} on ${{ parameters.environment }}'
+  jobs:
+  - job: Terraform_Execution
+    steps:
+    # 1. Install Terraform (Safety step)
+    - task: TerraformInstaller@1
+      displayName: 'Install Terraform $(TERRAFORM_VERSION)'
+      inputs:
+        terraformVersion: '$(TERRAFORM_VERSION)'
+
+    # 2. Init: Connects to S3 Backend dynamically
+    - script: |
+        echo "Initializing Terraform for ${{ parameters.environment }}..."
+        terraform init \
+          -backend-config="bucket=$(S3_BUCKET_NAME)" \
+          -backend-config="key=${{ parameters.environment }}/terraform.tfstate" \
+          -backend-config="region=$(AWS_REGION)"
+      displayName: 'Terraform Init'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+
+    # 3. Plan: Runs for 'plan' OR 'apply' actions
+    - script: |
+        echo "Running Terraform Plan..."
+        terraform plan -var-file="${{ parameters.environment }}.tfvars" -out=tfplan
+      displayName: 'Terraform Plan'
+      condition: ne('${{ parameters.action }}', 'destroy')
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+
+    # 4. Apply: Only runs if user selected 'apply'
+    - script: |
+        echo "APPLYING Infrastructure changes..."
+        terraform apply -auto-approve tfplan
+      displayName: 'Terraform Apply'
+      condition: eq('${{ parameters.action }}', 'apply')
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+
+    # 5. Destroy: Only runs if user selected 'destroy'
+    - script: |
+        echo "DESTROYING Infrastructure..."
+        terraform destroy -var-file="${{ parameters.environment }}.tfvars" -auto-approve
+      displayName: 'Terraform Destroy'
+      condition: eq('${{ parameters.action }}', 'destroy')
+      workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
