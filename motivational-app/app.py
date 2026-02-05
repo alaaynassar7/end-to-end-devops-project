@@ -1,13 +1,33 @@
+import os
 from flask import Flask, render_template_string
+from pymongo import MongoClient
 
 app = Flask(__name__)
 
-MESSAGES = {
-    "1": "You are amazing! Keep pushing forward 💪",
-    "2": "Believe in your journey, stars take time to shine 🌟",
-    "3": "Every small step leads to a big success 🌈",
-    "4": "Innovation distinguishes between a leader and a follower 🚀"
-}
+# 1. Connect to MongoDB using the Secret
+# If no URI is provided, use a dummy local one to prevent crashing
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/testdb")
+client = MongoClient(MONGO_URI)
+db = client.get_database() # Connect to the default database in the URI
+collection = db.messages
+
+# 2. Define Default Messages (Seeds)
+DEFAULT_MESSAGES = [
+    {"_id": "1", "text": "You are amazing! Keep pushing forward 💪"},
+    {"_id": "2", "text": "Believe in your journey, stars take time to shine 🌟"},
+    {"_id": "3", "text": "Every small step leads to a big success 🌈"},
+    {"_id": "4", "text": "Innovation distinguishes between a leader and a follower 🚀"}
+]
+
+# 3. Auto-Seed Logic (If database is empty, fill it)
+try:
+    if collection.count_documents({}) == 0:
+        print("Database is empty. Seeding default messages...")
+        collection.insert_many(DEFAULT_MESSAGES)
+    else:
+        print("Database already has data. Connected successfully!")
+except Exception as e:
+    print(f"Error connecting to DB: {e}")
 
 HTML_TEMPLATE = """
 <!doctype html>
@@ -30,6 +50,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="app-card">
         <h1>Take Your Message</h1>
+        <p style="font-size: 12px; color: green;">🟢 Connected to MongoDB</p>
         <div class="grid">
             <button onclick="display('1')">01</button>
             <button onclick="display('2')">02</button>
@@ -48,7 +69,16 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE, messages=MESSAGES)
+    # Fetch messages directly from MongoDB
+    messages_from_db = {}
+    try:
+        for doc in collection.find():
+            messages_from_db[doc["_id"]] = doc["text"]
+    except:
+        # Fallback if DB fails
+        messages_from_db = {m["_id"]: m["text"] for m in DEFAULT_MESSAGES}
+        
+    return render_template_string(HTML_TEMPLATE, messages=messages_from_db)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

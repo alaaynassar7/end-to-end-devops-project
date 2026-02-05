@@ -48,7 +48,7 @@ resource "aws_apigatewayv2_integration" "ingress_integration" {
 resource "aws_apigatewayv2_route" "default_route" {
   count = var.load_balancer_arn == "" ? 0 : 1
 
-  api_id    = aws_apigatewayv2_api.main.id
+  api_id    = aws_apigatewayv2_api.maiSn.id
   route_key = "ANY /{proxy+}"
   
   # References the first instance of the integration created by count [0]
