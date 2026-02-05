@@ -28,10 +28,11 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       echo "Logging in to Amazon ECR..."
+      # Retrieve login password and pipe it to docker login
       aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$(AWS_REGION).amazonaws.com
 
 # 3. Build and Push Docker Image
-# This step builds the image from the Dockerfile and pushes it to ECR
+# This step builds the image from the Dockerfile inside 'motivational-app' folder and pushes it to ECR
 - task: AWSShellScript@1
   displayName: 'Build and Push Docker Image'
   inputs:
@@ -45,8 +46,11 @@ steps:
       
       echo "Building Docker Image: $REPO_URL:$IMAGE_TAG"
       
-      # Build the image
-      docker build -t $REPO_URL:$IMAGE_TAG .
+      # FIXED: Point to the correct Dockerfile location and build context
+      # -f motivational-app/dockerfile : Path to the Dockerfile (lowercase 'd' as seen in your screenshot)
+      # motivational-app/ : The build context directory
+      docker build -f motivational-app/dockerfile -t $REPO_URL:$IMAGE_TAG motivational-app/
+      
       # Tag it also as 'latest' for convenience
       docker tag $REPO_URL:$IMAGE_TAG $REPO_URL:latest
 
