@@ -17,3 +17,8 @@ output "nat_gateway_ip" {
   description = "The public IP of the NAT Gateway"
   value       = aws_eip.nat.public_ip
 }
+
+output "default_security_group_id" {
+  description = "The ID of the default security group created with the VPC"
+  value       = aws_vpc.main.default_security_group_id
+}

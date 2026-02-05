@@ -57,9 +57,7 @@ module "api_gateway" {
   project_name       = var.project_name
   
   private_subnet_ids = module.network.private_subnet_ids 
-  
-  security_group_id  = module.network.security_group_id 
-  
+  security_group_id = module.network.default_security_group_id  
   load_balancer_arn  = var.load_balancer_arn
   tags               = var.tags
 }
