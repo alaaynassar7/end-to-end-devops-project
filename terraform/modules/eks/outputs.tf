@@ -1,15 +1,19 @@
 output "cluster_name" {
-  value = aws_eks_cluster.main.name
+  description = "The name of the EKS cluster"
+  value       = aws_eks_cluster.main.name
 }
 
 output "cluster_endpoint" {
-  value = aws_eks_cluster.main.endpoint
+  description = "The endpoint for the EKS Kubernetes API"
+  value       = aws_eks_cluster.main.endpoint
 }
 
-output "cluster_ca_certificate" {
-  value = aws_eks_cluster.main.certificate_authority[0].data
+output "cluster_certificate_authority_data" {
+  description = "The base64 encoded certificate data required to communicate with the cluster"
+  value       = aws_eks_cluster.main.certificate_authority[0].data
 }
 
-output "oidc_provider_arn" {
-  value = aws_iam_openid_connect_provider.eks.arn
+output "oidc_issuer_url" {
+  description = "The URL on the EKS cluster for the OpenID Connect identity provider"
+  value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }

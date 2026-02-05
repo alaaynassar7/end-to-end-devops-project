@@ -1,7 +1,9 @@
 variable "project_name" {
-  type = string
+  description = "Project name prefix used for resource identification"
+  type        = string
 }
 
-variable "cluster_name" {
-  type = string
+variable "tags" {
+  description = "Standard resource tags for the project"
+  type        = map(string)
 }

@@ -1,50 +1,62 @@
-# 1. Network: Creates VPC, Subnets, IGW, NAT
+# 1. Infrastructure Networking Layer
 module "network" {
-  source               = "./modules/network"
-  project_name         = var.name_prefix
-  environment          = var.tags["env"]
-  vpc_cidr             = var.vpc_cidr
-  public_subnets_cidr  = var.public_subnet_cidrs
-  private_subnets_cidr = var.private_subnet_cidrs
-  availability_zones   = var.azs
+  source         = "./modules/network"
+  project_name   = var.project_name
+  vpc_cidr       = var.vpc_cidr
+  public_cidrs   = var.public_cidrs
+  private_cidrs  = var.private_cidrs
+  azs            = var.azs
+  tags           = var.tags
 }
 
-# 2. IAM: Roles for EKS Cluster and Worker Nodes
-module "iam" {
+# 2. Identity and Access Management Layer
+module "iam_base" {
   source       = "./modules/iam"
-  project_name = var.name_prefix
-  cluster_name = var.cluster_name
+  project_name = var.project_name
+  tags         = var.tags
 }
 
-# 3. EKS: Kubernetes Cluster & Node Groups
+# 3. Compute Layer (EKS Cluster)
 module "eks" {
-  source           = "./modules/eks"
-  project_name     = var.name_prefix
-  cluster_role_arn = module.iam.cluster_role_arn
-  node_role_arn    = module.iam.node_role_arn
-  private_subnets  = module.network.private_subnets_ids
+  source             = "./modules/eks"
+  project_name       = var.project_name
+  kubernetes_version = var.kubernetes_version
+  cluster_role_arn   = module.iam_base.cluster_role_arn
+  node_role_arn      = module.iam_base.node_role_arn
+  private_subnet_ids = module.network.private_subnet_ids
+  instance_types     = var.instance_types
   
-  # Scaling & Instance configuration passed from root variables
-  node_desired     = var.node_desired
-  node_min         = var.node_min
-  node_max         = var.node_max
-  instance_types   = var.instance_types
+  # Dependencies to ensure IAM roles exist before cluster/nodes
+  cluster_role_policy_attachment = module.iam_base.cluster_role_arn # simplified
+  node_role_policy_attachments   = module.iam_base.node_role_arn    # simplified
+  
+  tags = var.tags
 }
 
-# 4. Load Balancing: NLB and Target Groups
-module "lb" {
-  source         = "./modules/load_balancing"
-  project_name   = var.name_prefix
-  vpc_id         = module.network.vpc_id
-  public_subnets = module.network.public_subnets_ids
+# 4. Container Registry for CI/CD artifacts
+module "ecr" {
+  source       = "./modules/ecr"
+  project_name = var.project_name
+  tags         = var.tags
 }
 
-# 5. Identity & DNS: Route53 and Cognito
-module "identity" {
-  source       = "./modules/identity_dns"
-  project_name = var.name_prefix
-  domain_name  = var.domain_name
-  #nlb_dns_name = module.lb.nlb_dns_name
-  # Fixed Zone ID for NLB in us-east-1
-  #nlb_zone_id  = "Z26RNL4B79WM9H" 
+# 5. Security & Identity Integration (OIDC & IRSA)
+module "security" {
+  source          = "./modules/security"
+  project_name    = var.project_name
+  oidc_issuer_url = module.eks.oidc_issuer_url
+  tags            = var.tags
+  
+  # Policy for Ingress controller (This ARN should be provided in variables)
+  ingress_controller_policy_arn = var.ingress_controller_policy_arn
+}
+
+# 6. Entry Point Layer (API Gateway)
+module "api_gateway" {
+  source             = "./modules/api-gateway"
+  project_name       = var.project_name
+  private_subnet_ids = module.network.private_subnet_ids
+  security_group_id  = module.network.vpc_id # You might need a specific SG later
+  load_balancer_arn  = "PENDING" # Will be updated after Ingress deployment
+  tags               = var.tags
 }
