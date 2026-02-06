@@ -15,18 +15,16 @@ spec:
     spec:
       containers:
       - name: motivational-app
-        # Ensure this matches your ECR image URI
         image: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-app-repo:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 5000 # App runs on port 5000 internally
-        # Injecting Environment Variables from Secrets
+        - containerPort: 5000 
         env:
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:
-              name: mongodb-secret  # Name of the K8s Secret
-              key: MONGO_URI        # Key inside the Secret
+              name: mongo-secret
+              key: MONGO_URI
 ---
 apiVersion: v1
 kind: Service
@@ -34,11 +32,10 @@ metadata:
   name: motivational-service
   namespace: default
 spec:
-  # LoadBalancer type to provision an AWS ELB
   type: LoadBalancer
   selector:
     app: motivational-app
   ports:
     - protocol: TCP
-      port: 80         # External HTTP port
-      targetPort: 5000 # Target container port
+      port: 80
+      targetPort: 5000
