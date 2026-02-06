@@ -324,10 +324,4 @@ Example screenshot (add to repo in `/docs/screenshots` and link here):
 
 ---
 ## Contact
-Project owner: alaaynassar7
-
-
----
-
-## Contact
-Project owner: alaaynassar7
+Project owner: alaaynassar7@gmail.com
