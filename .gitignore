@@ -17,6 +17,8 @@ override.tf.json
 errored.tfstate
 *.tfplan
 tfplan
+# Added for your project cleanup
+main 
 
 # Terraform variable files (sensitive)
 *.tfvars
@@ -52,23 +54,22 @@ Thumbs.db
 desktop.ini
 
 # ====================================================================
-# Development & Frameworks (Voting/Worker Apps)
+# Development & Frameworks (Python & Environments)
 # ====================================================================
-# Node modules
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+# Added for your specific virtual environment
+myenv/
 venv/
 env/
 ENV/
+
+# Node modules
+node_modules/
+npm-debug.log*
 
 # .NET
 bin/
@@ -87,6 +88,8 @@ charts/*.tgz
 requirements.lock
 .dockerignore
 .azure-pipelines/
+# Added to cleanup temporary helm tests
+temp-chart/
 
 # ====================================================================
 # Logs, Secrets & Temp Files
