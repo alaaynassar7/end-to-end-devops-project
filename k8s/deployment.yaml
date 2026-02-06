@@ -15,6 +15,7 @@ spec:
     spec:
       containers:
       - name: motivational-app
+        # This URI must match your latest ECR image
         image: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-app-repo:latest
         imagePullPolicy: Always
         ports:
