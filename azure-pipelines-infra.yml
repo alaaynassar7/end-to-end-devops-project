@@ -35,7 +35,7 @@ variables:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
   ${{ if eq(parameters.environment, 'nonprod') }}:
-    STATE_KEY: 'infra/nonprod/terracform.tfstate'
+    STATE_KEY: 'infra/nonprod/terraform.tfstate'
     VAR_FILE: 'nonprod.tfvars'
 
 stages:
@@ -52,8 +52,9 @@ stages:
       inputs:
         terraformVersion: 'latest'
 
+    # Step 1: Initialization (Always runs)
     - task: AWSShellScript@1
-      displayName: 'Terraform Init (Dynamic Backend)'
+      displayName: 'Terraform Init'
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
@@ -66,3 +67,40 @@ stages:
             -backend-config="key=$(STATE_KEY)" \
             -backend-config="region=$(REGION)" \
             -reconfigure
+
+    # Step 2: Run Plan (Runs if Action is 'plan' OR 'apply')
+    - task: AWSShellScript@1
+      displayName: 'Terraform Plan'
+      condition: or(eq(variables['ACTION_VALUE'], 'plan'), eq(variables['ACTION_VALUE'], 'apply'))
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
+          terraform plan -var-file="$(VAR_FILE)" -out=tfplan
+
+    # Step 3: Run Apply (ONLY runs if Action is 'apply')
+    - task: AWSShellScript@1
+      displayName: 'Terraform Apply'
+      condition: eq(variables['ACTION_VALUE'], 'apply')
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
+          # We use the plan file generated in the previous step
+          terraform apply "tfplan"
+
+    # Step 4: Run Destroy (ONLY runs if Action is 'destroy')
+    - task: AWSShellScript@1
+      displayName: 'Terraform Destroy'
+      condition: eq(variables['ACTION_VALUE'], 'destroy')
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(REGION)'
+        scriptType: 'inline'
+        inlineScript: |
+          cd $(WORKING_DIR)
+          terraform destroy -var-file="$(VAR_FILE)" -auto-approve
