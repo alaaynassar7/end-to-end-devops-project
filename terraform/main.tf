@@ -86,18 +86,3 @@ module "cognito" {
   tags         = var.tags
 }
 
-# ------------------------------------------------------------------------
-# 8. Kubernetes Addons (Helm Charts)
-# ------------------------------------------------------------------------
-module "kubernetes_addons" {
-  source = "./modules/kubernetes-addons"
-
-  project_name      = var.project_name
-  cluster_name      = module.eks.cluster_name
-  cluster_endpoint  = module.eks.cluster_endpoint
-  
-  
-  tags = var.tags
-  
-  depends_on = [module.eks, module.iam]
-}

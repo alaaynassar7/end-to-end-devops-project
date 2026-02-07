@@ -1,68 +1,73 @@
-trigger: none # Manual trigger only
-
-pool:
-  vmImage: 'ubuntu-latest'
+trigger: none 
 
 variables:
-  # Replace with your actual AWS Service Connection name in Azure DevOps
   AWS_SERVICE_CONNECTION: 'alaa-aws'
   REGION: 'us-east-1'
-  # Ensure this matches your EKS cluster name created by Terraform
   CLUSTER_NAME: 'alaa-devops-project-cluster'
 
+pool:
+  name: 'Self hosted pools'  
+  demands:
+   - Agent.Name -equals alaaynassar-VMware 
+
 steps:
-# Step 1: Checkout the repository
+# Step 1: Clone the source code into the pipeline workspace
 - checkout: self
 
-# Step 2: Install Helm and Kubectl (Required for deploying charts)
+# Step 2: Install required CLI tools (Helm & Kubectl) on the agent
 - task: HelmInstaller@0
-  displayName: 'Install Helm'
+  displayName: 'Setup Tooling'
   inputs:
     helmVersion: 'latest'
     installKubectl: true
 
-# Step 3: Configure Cluster Access and Install Tools
+# Step 3: Deployment of Cluster Add-ons and Access Configuration
 - task: AWSShellScript@1
-  displayName: 'Helm Installs: Nginx, ArgoCD'
+  displayName: 'Deploy Cluster Tools'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(REGION)'
     scriptType: 'inline'
     inlineScript: |
-      echo "--- Step 1: Update Kubeconfig ---"
-      # Retrieve kubeconfig to allow kubectl to interact with the EKS cluster
+      # 1. AUTHENTICATION: Configure kubectl to communicate with EKS
+      echo "Retrieving EKS credentials..."
       aws eks update-kubeconfig --region $(REGION) --name $(CLUSTER_NAME)
       
-      # Verify connectivity by listing nodes
+      # 2. VALIDATION: Verify that worker nodes are active and reachable
+      echo "Verifying cluster nodes..."
       kubectl get nodes
 
-      echo "--- Step 2: Install Ingress-Nginx Controller ---"
-      # Add the official Ingress-Nginx Helm repository
+      # 3. INGRESS: Deploy Nginx Ingress Controller using Helm
+      # This provides entry points to the cluster services via an AWS NLB
+      echo "Installing Nginx Ingress Controller..."
       helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
       helm repo update
-
-      # Install Ingress-Nginx.
-      # The annotation ensures an AWS Network Load Balancer (NLB) is provisioned.
+      
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
         --wait
 
-      echo "--- Step 3: Install Argo CD ---"
-      # Create a namespace for Argo CD if it doesn't exist
+      # 4. GitOps: Install Argo CD for continuous deployment management
+      echo "Installing Argo CD..."
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-      
-      # Apply the official Argo CD install manifest
       kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
       
-      echo "Waiting for Argo CD server to be ready..."
-      # Wait up to 5 minutes for the Argo CD server pod to be available
+      # Wait for Argo CD server to be ready for use
+      echo "Waiting for Argo CD availability..."
       kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 
-      echo "--- Installation Complete ---"
-
-      echo "--- OUTPUT: Load Balancer Hostname ---"
-      # Retrieve and print the Load Balancer DNS name.
-      # You will need to copy this value for your Terraform 'load_balancer_arn' variable later.
+      # 5. OUTPUTS: Capture crucial information for the next integration steps
+      echo "------------------------------------------------------------"
+      echo "DEPLOYMENT COMPLETE"
+      echo "------------------------------------------------------------"
+      
+      # Retrieve Load Balancer DNS for API Gateway integration
+      echo "Load Balancer DNS Name:"
       kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-      echo "" # Print a new line
+      echo -e "\n"
+
+      # Retrieve the auto-generated ArgoCD admin password
+      echo "ArgoCD Initial Admin Password:"
+      kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+      echo -e "\n"

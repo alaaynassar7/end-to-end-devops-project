@@ -23,7 +23,6 @@ pool:
   name: 'Self hosted pools'  
   demands:
    - Agent.Name -equals alaaynassar-VMware 
-# -------------------
 
 variables:
   AWS_SERVICE_CONNECTION: 'alaa-aws' 
@@ -31,6 +30,7 @@ variables:
   BUCKET_NAME: 'end-to-end-devops-project-bucket'
   REGION: 'us-east-1'
   ACTION_VALUE: ${{ parameters.terraformAction }}
+  
   ${{ if eq(parameters.environment, 'prod') }}:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
@@ -44,7 +44,6 @@ stages:
   jobs:
   - job: TerraformJob
     steps:
-    
     - checkout: self
       clean: true
 
@@ -54,50 +53,16 @@ stages:
         terraformVersion: 'latest'
 
     - task: AWSShellScript@1
-      displayName: 'Terraform Init'
+      displayName: 'Terraform Init (Dynamic Backend)'
       inputs:
         awsCredentials: '$(AWS_SERVICE_CONNECTION)'
         regionName: '$(REGION)'
         scriptType: 'inline'
         inlineScript: |
           cd $(WORKING_DIR)
-          # مسح مجلد .terraform القديم لتجنب تضارب الـ Backend
           rm -rf .terraform
           terraform init \
             -backend-config="bucket=$(BUCKET_NAME)" \
             -backend-config="key=$(STATE_KEY)" \
-            -backend-config="region=$(REGION)"
-
-    - task: AWSShellScript@1
-      displayName: 'Terraform Plan Only'
-      condition: eq(variables['ACTION_VALUE'], 'plan')
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          terraform plan -var-file="$(VAR_FILE)"
-
-    - task: AWSShellScript@1
-      displayName: 'Terraform Full Deployment (Plan & Apply)'
-      condition: eq(variables['ACTION_VALUE'], 'apply')
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          terraform plan -var-file="$(VAR_FILE)"
-          terraform apply -var-file="$(VAR_FILE)" -auto-approve
-
-    - task: AWSShellScript@1
-      displayName: 'Terraform Destroy'
-      condition: eq(variables['ACTION_VALUE'], 'destroy')
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          terraform destroy -var-file="$(VAR_FILE)" -auto-approve
+            -backend-config="region=$(REGION)" \
+            -reconfigure
