@@ -11,7 +11,7 @@ private_cidrs = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 # --- Integration Configuration ---
 # This is required. Leave it empty for the first run.
 # After the Ingress Controller creates the NLB, you will paste the ARN here.
-integration_uri = ""
+integration_uri = "http://ad22f48977c87461aa8a9364faa608ee-19978a9a7b3f723f.elb.us-east-1.amazonaws.com"
 
 # --- Project Tagging ---
 tags = {
