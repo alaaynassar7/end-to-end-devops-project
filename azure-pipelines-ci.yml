@@ -47,20 +47,15 @@ steps:
     git config --global user.name "AzurePipeline"
     
     rm -rf repo-temp
-    
-    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git repo-temp || exit 1
-    
+    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git repo-temp
     cd repo-temp
     
-    # Update Tag in values.yaml
+    # Update Tag
     sed -i 's/tag: ".*"/tag: "$(IMAGE_TAG)"/' helm-charts/motivational-app/values.yaml
     
-    # Update Repository URL in values.yaml
+    # Update Repository
     sed -i "s|repository: .*|repository: $(fullImageRepo)|" helm-charts/motivational-app/values.yaml
 
-    echo "Verifying changes..."
-    cat helm-charts/motivational-app/values.yaml | grep -E "repository|tag"
-    
     git add .
     git commit -m "chore: update image to ECR $(IMAGE_TAG) [Skip CI]"
     git push origin main
