@@ -5,6 +5,9 @@ image:
   pullPolicy: Always
   tag: "2106"
 
+imagePullSecrets:
+  - name: ecr-secret
+
 service:
   type: ClusterIP
   port: 80
@@ -21,14 +24,13 @@ resources:
 livenessProbe:
   httpGet:
     path: /
-    port: http
-  initialDelaySeconds: 10
+    port: 5000
+  initialDelaySeconds: 15
   periodSeconds: 10
 
 readinessProbe:
   httpGet:
     path: /
-    port: http
-  initialDelaySeconds: 10
+    port: 5000
+  initialDelaySeconds: 15
   periodSeconds: 10
-
