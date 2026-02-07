@@ -1,0 +1,80 @@
+name: Terraform Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select Environment'
+        required: true
+        default: 'nonprod'
+        type: choice
+        options:
+          - nonprod
+          - prod
+      terraformAction:
+        description: 'Select Terraform Action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  WORKING_DIR: 'terraform'
+  BUCKET_NAME: 'end-to-end-devops-project-bucket'
+  REGION: 'us-east-1'
+  STATE_KEY: ${{ github.event.inputs.environment == 'prod' && 'infra/prod/terraform.tfstate' || 'infra/nonprod/terraform.tfstate' }}
+  VAR_FILE: ${{ github.event.inputs.environment == 'prod' && 'prod.tfvars' || 'nonprod.tfvars' }}
+
+jobs:
+  terraform:
+    name: 'Terraform Job'
+    runs-on: [self-hosted, "alaaynassar-VMware"]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+
+      # إعداد صلاحيات AWS (يفضل استخدام Secrets بدلاً من Hardcoding)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.REGION }}
+
+      # الخطوة 1: Initialization
+      - name: Terraform Init
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          rm -rf .terraform
+          terraform init \
+            -backend-config="bucket=${{ env.BUCKET_NAME }}" \
+            -backend-config="key=${{ env.STATE_KEY }}" \
+            -backend-config="region=${{ env.REGION }}" \
+            -reconfigure
+
+      - name: Terraform Plan
+        if: github.event.inputs.terraformAction == 'plan' || github.event.inputs.terraformAction == 'apply'
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          terraform plan -var-file="${{ env.VAR_FILE }}" -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event.inputs.terraformAction == 'apply'
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          terraform apply "tfplan"
+
+      - name: Terraform Destroy
+        if: github.event.inputs.terraformAction == 'destroy'
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          terraform destroy -var-file="${{ env.VAR_FILE }}" -auto-approve
