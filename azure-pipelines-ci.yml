@@ -2,75 +2,62 @@ trigger:
 - main
 
 variables:
-  # AWS Infrastructure Variables
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  AWS_SERVICE_CONNECTION: 'alaa-aws' 
   AWS_REGION: 'us-east-1'
-  ECR_REPOSITORY_NAME: 'alaa-devops-project-app-repo'
-  IMAGE_TAG: '$(Build.BuildId)'
   
-  # External Tools Configuration
-  SONAR_CONNECTION: 'sonar-cloud-conn' 
-  NEXUS_URL: 'http://$(NEXUS_PRIVATE_IP):8081'
-  GITOPS_REPO: 'https://$(GITHUB_TOKEN)@github.com/alaaynassar7/gitops-repo.git'
+  ECR_REPOSITORY_NAME: 'alaa-devops-project-repo'
+  
+  IMAGE_TAG: '$(Build.BuildId)'
+   
+  GITOPS_REPO: 'https://$(GITHUB_TOKEN)@github.com/alaaynassar7/end-to-end-devops-final-project.git'
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Self hosted pools'
+  demands:
+   - Agent.Name -equals alaaynassar-VMware
 
 steps:
-# Step 1: Initialize SonarQube analysis to check code quality
-- task: SonarQubePrepare@5
-  inputs:
-    SonarQube: '$(SONAR_CONNECTION)'
-    scannerMode: 'CLI'
-    configMode: 'manual'
-    cliProjectKey: 'motivational-app'
-
-# Step 2: Execute Sonar Scanner and enforce Quality Gate
-- script: |
-    sonar-scanner \
-      -Dsonar.projectKey=motivational-app \
-      -Dsonar.sources=motivational-app/ \
-      -Dsonar.host.url=$(SONAR_URL) \
-      -Dsonar.login=$(SONAR_TOKEN)
-  displayName: 'Quality Gate Analysis'
-
-# Step 3: Archive application source and upload to Nexus Repository
-- script: |
-    tar -czf app-$(Build.BuildId).tar.gz motivational-app/
-    curl -v -u $(NEXUS_USER):$(NEXUS_PASS) --upload-file app-$(Build.BuildId).tar.gz $(NEXUS_URL)/repository/raw-repo/
-  displayName: 'Nexus Artifact Archival'
-
-# Step 4: Login, Build, and Push Docker image to Amazon ECR
 - task: AWSShellScript@1
-  displayName: 'Containerization and ECR Push'
+  displayName: 'Build & Push to ECR'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
+      # Get Account ID
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       REPO_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME"
       
+      # Login to ECR
       aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $REPO_URL
+       
+      echo "Building image: $REPO_URL:$(IMAGE_TAG)"
       
+      # Build & Push
+      # تأكدي إن الدوكر فايل جوه فولدر motivational-app
       docker build -f motivational-app/dockerfile -t $REPO_URL:$(IMAGE_TAG) motivational-app/
       docker push $REPO_URL:$(IMAGE_TAG)
       
-      # Export Image URL for the next step
+      # Save variable for next step
       echo "##vso[task.setvariable variable=fullImageRepo]$REPO_URL"
 
-# Step 5: GitOps Trigger - Update Image Tag in the Manifest Repository
+# Step 2: GitOps Trigger - Update Image Tag in Helm Values
 - script: |
-    git config --global user.email "devops-bot@alaa.com"
-    git config --global user.name "AzureDevOpsBot"
+    git config --global user.email "pipeline-bot@alaa.com"
+    git config --global user.name "AzurePipeline"
+     
+    # Clone the repo into a temp folder
+    rm -rf repo-temp
+    git clone $(GITOPS_REPO) repo-temp
+    cd repo-temp
     
-    git clone $(GITOPS_REPO)
-    cd gitops-repo
+    sed -i 's/tag: ".*"/tag: "$(IMAGE_TAG)"/' helm-charts/motivational-app/values.yaml
     
-    # Using sed to update the image tag dynamically in the deployment manifest
-    sed -i "s|image:.*|image: $(fullImageRepo):$(IMAGE_TAG)|g" k8s/deployment.yaml
-    
+    # Check changes (Debugging)
+    git diff
+     
+    # Commit & Push
     git add .
-    git commit -m "Update image to version $(IMAGE_TAG) [Skip CI]"
+    git commit -m "chore: update image tag to $(IMAGE_TAG) by Pipeline [Skip CI]"
     git push origin main
-  displayName: 'GitOps Manifest Synchronization'
+  displayName: 'Update Helm Chart Version'
