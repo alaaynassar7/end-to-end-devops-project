@@ -1,41 +1,32 @@
-# --- EKS Cluster Control Plane ---
-# Provisions the Kubernetes control plane
+# 1. EKS Cluster
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
   role_arn = var.cluster_role_arn
-  version  = var.kubernetes_version
+  version  = "1.29"
 
   vpc_config {
-    subnet_ids              = var.private_subnet_ids
+    subnet_ids              = var.subnet_ids
+    security_group_ids      = [var.node_sg_id]
     endpoint_private_access = true
     endpoint_public_access  = true
   }
-
-  # Ensure IAM Role permissions are created before the cluster
-  depends_on = [var.cluster_role_policy_attachment]
-
-  tags = var.tags
 }
 
-# --- Managed Node Group ---
-# Provisions a group of worker nodes managed by AWS
+# 2. Managed Node Group 
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${var.project_name}-node-group"
   node_role_arn   = var.node_role_arn
-  subnet_ids      = var.private_subnet_ids
+  subnet_ids      = var.subnet_ids
 
   scaling_config {
-    desired_size = var.desired_capacity
-    max_size     = var.max_capacity
-    min_size     = var.min_capacity
+    desired_size = 2
+    max_size     = 3
+    min_size     = 1
   }
 
-  instance_types = var.instance_types
+  instance_types = ["t3.small"]
   capacity_type  = "ON_DEMAND"
 
-  # Ensure IAM Role permissions are created before the nodes
-  depends_on = [var.node_role_policy_attachments]
-
-  tags = var.tags
+  depends_on = [aws_eks_cluster.main]
 }

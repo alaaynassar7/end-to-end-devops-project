@@ -1,7 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  # Updated name to match your project
   name: {{ include "motivational-app.fullname" . }}
   labels:
     {{- include "motivational-app.labels" . | nindent 4 }}
@@ -35,10 +34,17 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              # IMPORTANT CHANGE HERE:
-              # Use targetPort (5000) for the container, not the service port (80)
               containerPort: {{ .Values.service.targetPort | default 5000 }}
               protocol: TCP
+          
+
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.env.mongoUriSecretName }}
+                  key: {{ .Values.env.mongoUriKey }}
+
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

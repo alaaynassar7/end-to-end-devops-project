@@ -1,18 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: motivational-app-argo
+  name: motivational-app
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/alaaynassar7/end-to-end-devops-project.git' # Your GitHub Repository URL
+    repoURL: 'https://github.com/alaaynassar7/end-to-end-devops-project.git'
     targetRevision: main
-    path: k8s # Path to the directory containing Kubernetes manifests
+    path: helm-charts/motivational-app
+    helm:
+      valueFiles:
+        - values.yaml
   destination:
-    server: 'https://kubernetes.default.svc' # The internal API server address
-    namespace: default # The namespace where the app will be deployed
+    server: 'https://kubernetes.default.svc'
+    namespace: default
   syncPolicy:
     automated:
-      prune: true # Automatically delete resources that are removed from Git
-      selfHeal: true # Automatically fix resources if they drift from Git state
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

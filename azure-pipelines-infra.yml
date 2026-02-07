@@ -20,14 +20,16 @@ parameters:
   - destroy
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Self hosted pools'  
+  demands:
+   - Agent.Name -equals alaaynassar-VMware 
+# -------------------
 
 variables:
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  AWS_SERVICE_CONNECTION: 'alaa-aws' 
   WORKING_DIR: 'terraform'
   BUCKET_NAME: 'end-to-end-devops-project-bucket'
   REGION: 'us-east-1'
-  # Mapping parameters to variables to use them in conditions safely
   ACTION_VALUE: ${{ parameters.terraformAction }}
   ${{ if eq(parameters.environment, 'prod') }}:
     STATE_KEY: 'infra/prod/terraform.tfstate'
@@ -42,6 +44,10 @@ stages:
   jobs:
   - job: TerraformJob
     steps:
+    
+    - checkout: self
+      clean: true
+
     - task: TerraformInstaller@1
       displayName: 'Install Terraform'
       inputs:
@@ -55,12 +61,13 @@ stages:
         scriptType: 'inline'
         inlineScript: |
           cd $(WORKING_DIR)
+          # مسح مجلد .terraform القديم لتجنب تضارب الـ Backend
+          rm -rf .terraform
           terraform init \
             -backend-config="bucket=$(BUCKET_NAME)" \
             -backend-config="key=$(STATE_KEY)" \
             -backend-config="region=$(REGION)"
 
-    # Using variables instead of parameters in conditions
     - task: AWSShellScript@1
       displayName: 'Terraform Plan Only'
       condition: eq(variables['ACTION_VALUE'], 'plan')

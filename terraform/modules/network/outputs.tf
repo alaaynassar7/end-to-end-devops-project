@@ -4,21 +4,16 @@ output "vpc_id" {
 }
 
 output "public_subnet_ids" {
-  description = "List of public subnet IDs"
+  description = "List of IDs of public subnets"
   value       = aws_subnet.public[*].id
 }
 
 output "private_subnet_ids" {
-  description = "List of private subnet IDs"
+  description = "List of IDs of private subnets"
   value       = aws_subnet.private[*].id
 }
 
 output "nat_gateway_ip" {
-  description = "The public IP of the NAT Gateway"
+  description = "Public IP address of the NAT Gateway"
   value       = aws_eip.nat.public_ip
-}
-
-output "default_security_group_id" {
-  description = "The ID of the default security group created with the VPC"
-  value       = aws_vpc.main.default_security_group_id
 }

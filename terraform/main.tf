@@ -1,63 +1,103 @@
-# 1. Infrastructure Networking Layer
+# ------------------------------------------------------------------------
+# 1. Networking Layer (VPC, Subnets, NAT Gateway)
+# ------------------------------------------------------------------------
 module "network" {
-  source         = "./modules/network"
-  project_name   = var.project_name
-  vpc_cidr       = var.vpc_cidr
-  public_cidrs   = var.public_cidrs
-  private_cidrs  = var.private_cidrs
-  azs            = var.azs
-  tags           = var.tags
+  source = "./modules/network"
+
+  project_name  = var.project_name
+  vpc_cidr      = var.vpc_cidr
+  public_cidrs  = var.public_cidrs
+  private_cidrs = var.private_cidrs
+  azs           = var.azs
+  tags          = var.tags
 }
 
-# 2. Identity and Access Management Layer
-module "iam_base" {
-  source       = "./modules/iam"
+# ------------------------------------------------------------------------
+# 2. Security Groups Layer (Network Firewalls)
+# ------------------------------------------------------------------------
+module "security_groups" {
+  source = "./modules/security-groups"
+
+  project_name = var.project_name
+  vpc_id       = module.network.vpc_id
+}
+
+# ------------------------------------------------------------------------
+# 3. Identity & Access Management Layer (IAM Roles, Policies)
+# ------------------------------------------------------------------------
+module "iam" {
+  source = "./modules/iam"
+
   project_name = var.project_name
   tags         = var.tags
+  
 }
 
-# 3. Compute Layer (EKS Cluster)
+# ------------------------------------------------------------------------
+# 4. Compute Layer (EKS Cluster, Node Groups)
+# ------------------------------------------------------------------------
 module "eks" {
-  source             = "./modules/eks"
-  project_name       = var.project_name
-  kubernetes_version = var.kubernetes_version
-  cluster_role_arn   = module.iam_base.cluster_role_arn
-  node_role_arn      = module.iam_base.node_role_arn
-  private_subnet_ids = module.network.private_subnet_ids
-  instance_types     = var.instance_types
+  source = "./modules/eks"
+
+  project_name     = var.project_name
+  subnet_ids       = module.network.private_subnet_ids
+  node_sg_id       = module.security_groups.node_sg_id
   
-  # Dependencies to ensure IAM roles exist before cluster/nodes
-  cluster_role_policy_attachment = module.iam_base.cluster_role_arn # simplified
-  node_role_policy_attachments   = module.iam_base.node_role_arn    # simplified
+  cluster_role_arn = module.iam.cluster_role_arn
+  node_role_arn    = module.iam.node_role_arn
   
   tags = var.tags
 }
 
-# 4. Container Registry for CI/CD artifacts
+# ------------------------------------------------------------------------
+# 5. Artifacts Layer (ECR Repository)
+# ------------------------------------------------------------------------
 module "ecr" {
-  source       = "./modules/ecr"
+  source = "./modules/ecr"
+
   project_name = var.project_name
   tags         = var.tags
 }
 
-# 5. Security & Identity Integration (OIDC & IRSA)
-module "security" {
-  source          = "./modules/security"
-  project_name    = var.project_name
-  oidc_issuer_url = module.eks.oidc_issuer_url
-  tags            = var.tags
+# ------------------------------------------------------------------------
+# 6. Entry Point Layer (API Gateway & VPC Link)
+# ------------------------------------------------------------------------
+module "api_gateway" {
+  source = "./modules/api-gateway"
+
+  project_name      = var.project_name
+  vpc_id            = module.network.vpc_id
+  subnet_ids        = module.network.private_subnet_ids
+  security_group_id = module.security_groups.alb_sg_id 
   
-  # Policy for Ingress controller (This ARN should be provided in variables)
-  ingress_controller_policy_arn = var.ingress_controller_policy_arn
+  integration_uri   = var.integration_uri
+  
+  tags = var.tags
 }
 
-# 6. Entry Point Layer (API Gateway)
-module "api_gateway" {
-  source             = "./modules/api-gateway"
-  project_name       = var.project_name
+# ------------------------------------------------------------------------
+# 7. Authentication Layer (Cognito User Pool)
+# ------------------------------------------------------------------------
+module "cognito" {
+  source = "./modules/cognito"
+
+  project_name = var.project_name
+  api_id       = module.api_gateway.api_id
+  tags         = var.tags
+}
+
+# ------------------------------------------------------------------------
+# 8. Kubernetes Addons (Helm Charts)
+# ------------------------------------------------------------------------
+module "kubernetes_addons" {
+  source = "./modules/kubernetes-addons"
+
+  project_name      = var.project_name
+  cluster_name      = module.eks.cluster_name
+  cluster_endpoint  = module.eks.cluster_endpoint
   
-  private_subnet_ids = module.network.private_subnet_ids 
-  security_group_id = module.network.default_security_group_id  
-  load_balancer_arn  = var.load_balancer_arn
-  tags               = var.tags
+  
+  tags = var.tags
+  
+  depends_on = [module.eks, module.iam]
 }

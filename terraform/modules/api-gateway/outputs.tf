@@ -1,5 +1,10 @@
+output "api_id" {
+  description = "The ID of the API Gateway"
+  value       = aws_apigatewayv2_api.main.id
+}
+
 output "api_endpoint" {
-  description = "The public endpoint URL of the API Gateway"
+  description = "The public URL of the API Gateway"
   value       = aws_apigatewayv2_api.main.api_endpoint
 }
 

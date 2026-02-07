@@ -1,80 +1,45 @@
-# --- Project Metadata ---
 variable "project_name" {
-  description = "Name of the project used for resource naming and tagging"
-  type        = string
+  type    = string
+  default = "alaa-devops-project"
 }
 
-variable "aws_region" {
-  description = "AWS region where resources will be deployed"
-  type        = string
-  default     = "us-east-1"
+variable "region" {
+  type    = string
+  default = "us-east-1"
 }
 
-variable "tags" {
-  description = "Common tags to be applied to all resources"
-  type        = map(string)
-}
-
-# --- Networking Variables ---
 variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
-  type        = string
+  type    = string
+  default = "10.0.0.0/16"
 }
 
 variable "public_cidrs" {
-  description = "List of CIDR blocks for public subnets"
-  type        = list(string)
+  type    = list(string)
+  default = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
 variable "private_cidrs" {
-  description = "List of CIDR blocks for private subnets"
-  type        = list(string)
+  type    = list(string)
+  default = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 }
 
 variable "azs" {
-  description = "List of Availability Zones for the subnets"
-  type        = list(string)
+  type    = list(string)
+  default = ["us-east-1a", "us-east-1b"]
 }
 
-# --- EKS Variables ---
-variable "kubernetes_version" {
-  description = "Kubernetes version for the EKS cluster"
+variable "tags" {
+  type = map(string)
+  default = {
+    Project     = "End-to-End-DevOps"
+    Environment = "non-prod"
+    Owner       = "Alaa-Nassar"
+    ManagedBy   = "Terraform"
+  }
+}
+
+variable "integration_uri" {
   type        = string
-  default     = "1.31"
-}
-
-variable "instance_types" {
-  description = "EC2 instance types for the EKS worker nodes"
-  type        = list(string)
-  default     = ["t3.small"]
-}
-
-variable "desired_capacity" {
-  description = "Desired number of worker nodes"
-  type        = number
-}
-
-variable "min_capacity" {
-  description = "Minimum number of worker nodes"
-  type        = number
-  default     = 1
-}
-
-variable "max_capacity" {
-  description = "Maximum number of worker nodes"
-  type        = number
-  default     = 3
-}
-
-# --- Security Variables ---
-variable "ingress_controller_policy_arn" {
-  description = "ARN of the IAM policy for the AWS Load Balancer Controller"
-  type        = string
-}
-
-# --- Added Variable for API Gateway Integration ---
-variable "load_balancer_arn" {
-  description = "The ARN of the load balancer (passed from K8s ingress later)"
-  type        = string
-  default     = "" # Initialized as empty for now
+  default     = ""
+  description = "Leave empty for the first run"
 }

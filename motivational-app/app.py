@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, jsonify
 from pymongo import MongoClient
 
 app = Flask(__name__)
@@ -8,16 +8,15 @@ app = Flask(__name__)
 MONGO_URI = os.getenv("MONGO_URI")
 
 def get_db_connection():
-    # Adding timeouts and direct database access to ensure green status
     client = MongoClient(MONGO_URI, connectTimeoutMS=10000, serverSelectionTimeoutMS=10000)
-    # This will try to get 'Project0' or fallback to the URI default
     return client.get_database()
 
+# جمل جديدة ملهمة ومختلفة
 DEFAULT_MESSAGES = {
-    "1": "You are a DevOps Star! Your potential is infinite ✨",
-    "2": "Every line of code you write is a step toward greatness 🚀",
-    "3": "Success is a journey, and you are leading the way 🌈",
-    "4": "Keep shining, Alaa! The world needs your brilliance 🌟"
+    "1": "The best way to predict the future is to create it. 🏗️",
+    "2": "Don't stop until you are proud of your infrastructure. 💻",
+    "3": "Your only limit is your mind, not your cloud quota. 🚀",
+    "4": "Consistency is the key to mastering DevOps. 🗝️"
 }
 
 HTML_TEMPLATE = """
@@ -28,52 +27,77 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Alaa's Motivational Hub</title>
     <style>
-        :root { --primary: #6366f1; --success: #22c55e; --error: #ef4444; --bg: #f5f3ff; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: #1f2937; }
-        .app-card { background: #ffffff; padding: 50px; border-radius: 30px; box-shadow: 0 20px 50px rgba(99, 102, 241, 0.1); text-align: center; max-width: 500px; width: 90%; border: 2px solid #e0e7ff; }
-        h1 { color: var(--primary); font-size: 2.5rem; margin-bottom: 10px; }
-        .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .status-text { font-size: 0.9rem; font-weight: 600; padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; }
-        .connected { background: #dcfce7; color: #166534; }
-        .offline { background: #fee2e2; color: #991b1b; }
-        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 30px; }
-        button { background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 1.2rem; cursor: pointer; transition: transform 0.2s, background 0.2s; }
-        button:hover { background: #4f46e5; transform: translateY(-3px); }
-        #message-display { margin-top: 40px; font-size: 1.4rem; font-style: italic; min-height: 60px; color: #4b5563; line-height: 1.5; }
-        footer { margin-top: 30px; font-size: 0.8rem; color: #9ca3af; }
+        :root { --primary: #6366f1; --success: #10b981; --bg: #f8fafc; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e293b; }
+        .app-card { background: #ffffff; padding: 40px; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); text-align: center; max-width: 500px; width: 95%; border: 1px solid #e2e8f0; }
+        h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 5px; }
+        .status-text { font-size: 0.85rem; font-weight: 600; margin-bottom: 20px; color: #64748b; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 25px 0; }
+        button { background: var(--primary); color: white; border: none; padding: 18px; border-radius: 12px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        button:hover { background: #4f46e5; transform: scale(1.05); }
+        #message-display { margin: 30px 0; font-size: 1.3rem; font-style: italic; min-height: 60px; color: #475569; display: flex; align-items: center; justify-content: center; }
+        
+        .admin-section { margin-top: 35px; padding-top: 25px; border-top: 1px solid #f1f5f9; text-align: left; }
+        .admin-section h4 { margin: 0 0 15px 0; color: #64748b; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .input-group { display: flex; gap: 8px; }
+        input { flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; }
+        select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; }
+        .save-btn { background: var(--success); font-size: 0.9rem; padding: 10px 15px; width: auto; }
+        .save-btn:hover { background: #059669; }
+        footer { margin-top: 30px; font-size: 0.75rem; color: #94a3b8; }
     </style>
 </head>
 <body>
     <div class="app-card">
         <h1>Hello, Alaa! ✨</h1>
-        <p>Your daily dose of inspiration is one click away.</p>
+        <div class="status-text">{{ "Database Live 🟢" if connected else "Running Offline 🟠" }}</div>
         
-        <div class="status-text {{ 'connected' if connected else 'offline' }}">
-            <span class="status-dot" style="background: {{ 'var(--success)' if connected else 'var(--error)' }};"></span>
-            {{ "Cloud Database Synced ✅" if connected else "Syncing your dreams... ⏳" }}
-        </div>
-
         <div class="grid">
             {% for id in ["1", "2", "3", "4"] %}
             <button onclick="display('{{ id }}')">{{ id }}</button>
             {% endfor %}
         </div>
         
-        <div id="message-display">Pick a number to start your magic...</div>
+        <div id="message-display">Select a number for inspiration...</div>
+
+        <div class="admin-section">
+            <h4>Update Hub ✍️</h4>
+            <div class="input-group">
+                <select id="btn-id">
+                    <option value="1">1</option><option value="2">2</option>
+                    <option value="3">3</option><option value="4">4</option>
+                </select>
+                <input type="text" id="new-msg" placeholder="Write something new...">
+                <button class="save-btn" onclick="updateMsg()">Update</button>
+            </div>
+        </div>
         
-        <footer>DevOps Final Project • 2026</footer>
+        <footer>DevOps Final Project • Alaa Nassar • 2026</footer>
     </div>
 
     <script>
-        const msgs = {{ messages | tojson }};
+        let msgs = {{ messages | tojson }};
         function display(id) {
-            const display = document.getElementById('message-display');
-            display.style.opacity = 0;
-            setTimeout(() => {
-                display.innerText = msgs[id];
-                display.style.opacity = 1;
-                display.style.transition = 'opacity 0.5s';
-            }, 200);
+            document.getElementById('message-display').innerText = msgs[id];
+        }
+
+        async function updateMsg() {
+            const id = document.getElementById('btn-id').value;
+            const text = document.getElementById('new-msg').value;
+            if(!text) return;
+
+            const response = await fetch('/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id, text})
+            });
+
+            if(response.ok) {
+                msgs[id] = text;
+                display(id);
+                document.getElementById('new-msg').value = '';
+                alert("Cloud Synced! ✅");
+            }
         }
     </script>
 </body>
@@ -84,24 +108,31 @@ HTML_TEMPLATE = """
 def index():
     messages_to_show = DEFAULT_MESSAGES
     is_connected = False
-    
     if MONGO_URI:
         try:
             db = get_db_connection()
-            db.command('ping')
-            is_connected = True
-            
             collection = db.messages
-            db_data = list(collection.find())
-            if db_data:
-                messages_to_show = {doc["_id"]: doc["text"] for doc in db_data}
-            else:
+            if collection.count_documents({}) == 0:
                 collection.insert_many([{"_id": k, "text": v} for k, v in DEFAULT_MESSAGES.items()])
+            db_data = list(collection.find())
+            messages_to_show = {doc["_id"]: doc["text"] for doc in db_data}
+            is_connected = True
         except Exception as e:
-            print(f"Connection update: {e}")
+            print(f"Error: {e}")
             is_connected = False
-
     return render_template_string(HTML_TEMPLATE, messages=messages_to_show, connected=is_connected)
+
+@app.route('/update', methods=['POST'])
+def update():
+    data = request.json
+    if MONGO_URI:
+        try:
+            db = get_db_connection()
+            db.messages.update_one({"_id": data['id']}, {"$set": {"text": data['text']}})
+            return jsonify({"status": "success"})
+        except:
+            return jsonify({"status": "error"}), 500
+    return jsonify({"status": "no_db"}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
