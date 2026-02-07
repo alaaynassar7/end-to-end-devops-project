@@ -1,9 +1,9 @@
 replicaCount: 1
 
 image:
-  repository: alaaynassar7/motivational-app
+  repository: 548135082630.dkr.ecr.us-east-1.amazonaws.com/motivational-app
   pullPolicy: Always
-  tag: "latest"
+  tag: "2105"
 
 service:
   type: ClusterIP
