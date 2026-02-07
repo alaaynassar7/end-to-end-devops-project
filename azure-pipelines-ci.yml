@@ -47,7 +47,9 @@ steps:
     git config --global user.name "AzurePipeline"
     
     rm -rf repo-temp
-    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-final-project.git repo-temp
+    
+    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git repo-temp || exit 1
+    
     cd repo-temp
     
     # Update Tag in values.yaml
