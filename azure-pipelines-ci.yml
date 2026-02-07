@@ -2,14 +2,10 @@ trigger:
 - main
 
 variables:
-  AWS_SERVICE_CONNECTION: 'alaa-aws' 
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
   AWS_REGION: 'us-east-1'
-  
   ECR_REPOSITORY_NAME: 'alaa-devops-project-repo'
-  
   IMAGE_TAG: '$(Build.BuildId)'
-   
-  GITOPS_REPO: 'https://$(GITHUB_TOKEN)@github.com/alaaynassar7/end-to-end-devops-final-project.git'
 
 pool:
   name: 'Self hosted pools'
@@ -24,40 +20,23 @@ steps:
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
-      # Get Account ID
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       REPO_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME"
-      
-      # Login to ECR
       aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $REPO_URL
-       
-      echo "Building image: $REPO_URL:$(IMAGE_TAG)"
-      
-      # Build & Push
-      # تأكدي إن الدوكر فايل جوه فولدر motivational-app
       docker build -f motivational-app/dockerfile -t $REPO_URL:$(IMAGE_TAG) motivational-app/
       docker push $REPO_URL:$(IMAGE_TAG)
-      
-      # Save variable for next step
       echo "##vso[task.setvariable variable=fullImageRepo]$REPO_URL"
 
-# Step 2: GitOps Trigger - Update Image Tag in Helm Values
 - script: |
     git config --global user.email "pipeline-bot@alaa.com"
     git config --global user.name "AzurePipeline"
-     
-    # Clone the repo into a temp folder
     rm -rf repo-temp
-    git clone $(GITOPS_REPO) repo-temp
+    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-final-project.git repo-temp
     cd repo-temp
-    
     sed -i 's/tag: ".*"/tag: "$(IMAGE_TAG)"/' helm-charts/motivational-app/values.yaml
-    
-    # Check changes (Debugging)
-    git diff
-     
-    # Commit & Push
     git add .
-    git commit -m "chore: update image tag to $(IMAGE_TAG) by Pipeline [Skip CI]"
+    git commit -m "chore: update image tag to $(IMAGE_TAG) [Skip CI]"
     git push origin main
   displayName: 'Update Helm Chart Version'
+  env:
+    MY_PAT: $(GITHUB_TOKEN)
