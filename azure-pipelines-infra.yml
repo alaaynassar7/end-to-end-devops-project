@@ -35,7 +35,7 @@ variables:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
   ${{ if eq(parameters.environment, 'nonprod') }}:
-    STATE_KEY: 'infra/nonprod/terraform.tfstate'
+    STATE_KEY: 'infra/nonprod/terracform.tfstate'
     VAR_FILE: 'nonprod.tfvars'
 
 stages:
