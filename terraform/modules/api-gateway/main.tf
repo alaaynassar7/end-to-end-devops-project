@@ -5,7 +5,7 @@ resource "aws_apigatewayv2_api" "main" {
   name          = "${var.project_name}-api"
   protocol_type = "HTTP"
   
-  # CORS Configuration (Optional but recommended for frontend apps)
+  # CORS Configuration
   cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -17,10 +17,8 @@ resource "aws_apigatewayv2_api" "main" {
 }
 
 # ------------------------------------------------------------------------
-# 2. VPC Link (The Bridge to Private Subnets)
+# 2. VPC Link (Reserved for future private connections)
 # ------------------------------------------------------------------------
-# This is the critical component that allows API Gateway to talk to your
-# private EKS Load Balancer without exposing it to the public internet.
 resource "aws_apigatewayv2_vpc_link" "main" {
   name               = "${var.project_name}-vpc-link"
   security_group_ids = [var.security_group_id]
@@ -37,7 +35,7 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
-  # Enable logging for debugging (Optional)
+  # Enable logging
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gw.arn
     format          = jsonencode({
@@ -64,23 +62,18 @@ resource "aws_cloudwatch_log_group" "api_gw" {
 }
 
 # ------------------------------------------------------------------------
-# 4. Integration (Wiring API GW -> VPC Link -> NLB)
+# 4. Integration (Wiring API GW -> NLB via Internet)
 # ------------------------------------------------------------------------
-# NOTE: This resource requires the Load Balancer ARN (integration_uri).
-# During the first run, this might fail if the LB doesn't exist yet.
-# We use 'count' to only create it if the URI is provided.
 resource "aws_apigatewayv2_integration" "eks_integration" {
   count = var.integration_uri != "" ? 1 : 0
 
-  api_id           = aws_apigatewayv2_api.main.id
-  integration_type = "HTTP_PROXY"
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
   
-  # The URI of the internal ALB/NLB Listener
+  # The DNS Name of the Load Balancer
   integration_uri    = var.integration_uri 
   integration_method = "ANY"
-  
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
+    connection_type    = "INTERNET"
 }
 
 # ------------------------------------------------------------------------
