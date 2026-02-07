@@ -1,54 +1,46 @@
-replicaCount: 2
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: motivational-app
+  labels:
+    app: motivational-app
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: motivational-app
+  template:
+    metadata:
+      labels:
+        app: motivational-app
+    spec:
+      containers:
+        - name: motivational-app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          
+          env:
+            - name: DB_CONNECTION
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_CONNECTION
 
-image:
-  repository: alaaynassar7/motivational-app
-  pullPolicy: IfNotPresent
-  tag: "v1.0.0"
-
-# Database Connection (Injected from Vault/Secret)
-env:
-  mongoUriSecretName: "mongodb-atlas-uri"
-  mongoUriKey: "connection_string"
-
-service:
-  type: ClusterIP
-  port: 80
-  targetPort: 5000 
-
-ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-  hosts:
-    - host: app.alaaynassar.com
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-
-livenessProbe:
-  httpGet:
-    path: /
-    port: 5000
-  initialDelaySeconds: 15
-  periodSeconds: 20
-
-readinessProbe:
-  httpGet:
-    path: /
-    port: 5000
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
-resources:
-  limits:
-    cpu: 200m
-    memory: 256Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-autoscaling:
-  enabled: false
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
