@@ -9,7 +9,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 spec:
   rules:
-  - host: API_GATEWAY_URL_PLACEHOLDER
+  - host: "ad22f48977c87461aa8a9364faa608ee-19978a9a7b3f723f.elb.us-east-1.amazonaws.com"
     http:
       paths:
       - path: /sonarqube
