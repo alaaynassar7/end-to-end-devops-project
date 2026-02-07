@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: 548135082630.dkr.ecr.us-east-1.amazonaws.com/motivational-app
   pullPolicy: Always
-  tag: "2106"
+  tag: "2108"
 
 imagePullSecrets:
   - name: ecr-secret
