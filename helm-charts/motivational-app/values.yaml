@@ -5,10 +5,8 @@
 replicaCount: 1
 
 image:
-  # REPLACE THIS WITH YOUR ECR REPOSITORY URI
-  repository: "123456789.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-repo"
+  repository: 548135082630.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-repo
   pullPolicy: Always
-  # Overridden by the pipeline usually, but 'latest' is a safe default
   tag: "latest"
 
 imagePullSecrets: []
