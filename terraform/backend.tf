@@ -1,9 +1,8 @@
-
 terraform {
   backend "s3" {
-    bucket = "end-to-end-devops-project-bucket" 
-    key     = "terraform.tfstate"
-    region  = "us-east-1"
+    bucket = "alaa-devops-project-terraform-state"
+    key    = "terraform.tfstate"                   
+    region = "us-east-1"
     encrypt = true
   }
 }
