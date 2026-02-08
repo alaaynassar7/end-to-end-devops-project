@@ -1,55 +1,57 @@
-trigger: none
-variables:
-- group: 'My Vars'
-- name: AWS_SERVICE_CONNECTION
-  value: 'alaa-aws'
-- name: ECR_REPOSITORY_NAME
-  value: 'motivational-app'
-- name: IMAGE_TAG
-  value: '$(Build.BuildId)'
+name: $(Date:yyyyMMdd)$(Rev:.r)-App-CI
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - motivational-app/*
 
 pool:
   name: 'Self hosted pools'
   demands:
    - Agent.Name -equals alaaynassar-VMware
 
+variables:
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  AWS_REGION: 'us-east-1'
+  # Make sure this matches the repo name created by Terraform
+  ECR_REPOSITORY_NAME: 'alaa-devops-project-repo' 
+
 steps:
 - checkout: self
 
-- task: SonarQubePrepare@5
-  displayName: 'SonarQube Analysis'
-  inputs:
-    SonarQube: 'SonarQube-Connection'
-    scannerMode: 'CLI'
-    configMode: 'manual'
-    cliProjectKey: 'motivational-app'
-
+# 1. Login to AWS ECR
 - task: AWSShellScript@1
-  displayName: 'Build & Push to ECR'
+  displayName: 'Login to ECR'
   inputs:
-    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-    regionName: 'us-east-1'
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
     scriptType: 'inline'
     inlineScript: |
+      aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$(AWS_REGION).amazonaws.com
+
+# 2. Build and Push Docker Image
+- task: AWSShellScript@1
+  displayName: 'Build and Push Image'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      # Get Account ID dynamically
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      REPO_URL="$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/$ECR_REPOSITORY_NAME"
-      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $REPO_URL
+      ECR_URI="$ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPOSITORY_NAME)"
+      
+      echo "Building Docker Image for: $ECR_URI"
+      
       cd motivational-app
-      docker build -t $REPO_URL:$(IMAGE_TAG) .
-      docker push $REPO_URL:$(IMAGE_TAG)
-      echo "##vso[task.setvariable variable=fullImageRepo]$REPO_URL"
-
-- task: SonarQubePublish@5
-
-- script: |
-    git config --global user.email "pipeline-bot@alaa.com"
-    git config --global user.name "AzurePipeline"
-    git clone https://$(MY_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git repo-temp
-    cd repo-temp
-    sed -i 's/tag: ".*"/tag: "$(IMAGE_TAG)"/' helm-charts/motivational-app/values.yaml
-    sed -i "s|repository: .*|repository: $(fullImageRepo)|" helm-charts/motivational-app/values.yaml
-    git add .
-    git commit -m "update image to $(IMAGE_TAG) [Skip CI]"
-    git push origin main
-  env:
-    MY_PAT: $(MY_PAT)
+      
+      # Build with two tags: BuildID and latest
+      docker build -t $ECR_URI:$(Build.BuildId) -t $ECR_URI:latest .
+      
+      echo "Pushing images..."
+      docker push $ECR_URI:$(Build.BuildId)
+      docker push $ECR_URI:latest
+      
+      echo "Image pushed successfully!"

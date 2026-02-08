@@ -1,3 +1,47 @@
+# Default values for motivational-app.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  # REPLACE THIS WITH YOUR ECR REPOSITORY URI
+  repository: "123456789.dkr.ecr.us-east-1.amazonaws.com/alaa-devops-project-repo"
+  pullPolicy: Always
+  # Overridden by the pipeline usually, but 'latest' is a safe default
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: "simple-web-app"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
 ingress:
   enabled: true
   className: "nginx"
@@ -5,7 +49,31 @@ ingress:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/rewrite-target: /
   hosts:
-    - host: "" 
+    - host: ""
       paths:
-        - path: /  
-          pathType: ImplementationSpecific
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Environment variables configuration matches what is expected in deployment.yaml
+env:
+  mongoUriSecretName: "db-secret"
+  mongoUriKey: "MONGO_URI"

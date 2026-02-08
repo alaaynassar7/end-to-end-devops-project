@@ -3,7 +3,7 @@ resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
   role_arn = var.cluster_role_arn
   
-  # Leaving version null allows AWS to pick the default stable version
+  # Leaving version null allows AWS to pick the default stable version (e.g., 1.32 or 1.33)
   version  = null 
 
   vpc_config {
@@ -38,8 +38,11 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = 1
   }
 
-  ami_type       = "AL2_x86_64" # Amazon Linux 2
-  
+  # --- FIX: Updated AMI Type for newer Kubernetes versions ---
+  # AL2_x86_64 is deprecated for new versions. Using Amazon Linux 2023 instead.
+  ami_type       = "AL2023_x86_64_STANDARD" 
+  # -----------------------------------------------------------
+
   # Using t3.small as requested (Cost Effective)
   instance_types = ["t3.small"] 
 
