@@ -45,6 +45,6 @@ variable "tags" {
 
 variable "integration_uri" {
   type        = string
-  default     = ""
+  default     = "http://pending-nlb-dns.com"
   description = "Target URI for the API Integration (NLB DNS)"
 }
