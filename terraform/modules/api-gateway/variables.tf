@@ -1,9 +1,5 @@
-variable "project_name" {}
-variable "environment"  {}
-variable "vpc_id"       {}
-variable "subnet_ids"   { type = list(string) }
-variable "security_group_id" {}
-variable "cognito_endpoint"  {}
-variable "cognito_client_id" {}
-variable "integration_uri"   {}
-variable "tags"         { type = map(string) }
+variable "project_name" { type = string }
+variable "integration_uri" { type = string }
+variable "cognito_client_id" { type = string }
+variable "cognito_endpoint" { type = string }
+variable "tags" { type = map(string) }

@@ -1,5 +1,4 @@
 terraform {
-  # Updated to support the version installed on your VMware (1.5.7)
   required_version = ">= 1.5.0"
 
   required_providers {
@@ -8,4 +7,8 @@ terraform {
       version = "~> 5.0"
     }
   }
+}
+
+provider "aws" {
+  region = var.region
 }

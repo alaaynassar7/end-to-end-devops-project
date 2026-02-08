@@ -1,46 +1,184 @@
-trigger: none 
-variables:
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
-  REGION: 'us-east-1'
-  CLUSTER_NAME: 'alaa-devops-project-cluster'
+name: $(Date:yyyyMMdd)$(Rev:.r)-Tools-Deployment
+trigger: none
+pr: none
 
 pool:
   name: 'Self hosted pools'
   demands:
-   - Agent.Name -equals alaaynassar-VMware 
+   - Agent.Name -equals alaaynassar-VMware
+
+variables:
+  AWS_SERVICE_CONNECTION: 'alaa-aws'
+  AWS_REGION: 'us-east-1'
+  TF_DIR: 'terraform'
+  TF_VAR_FILE: 'nonprod.tfvars'
 
 steps:
 - checkout: self
-- task: HelmInstaller@0
-  inputs:
-    helmVersion: 'latest'
-    installKubectl: true
 
-- task: AWSShellScript@1
-  displayName: 'Install Nginx, ArgoCD & SonarQube'
+# 1. Install Terraform
+# Purpose: Required to run 'terraform output' to get the EKS cluster name
+# and to perform the final 'terraform apply' to link API Gateway.
+- task: TerraformInstaller@1
+  displayName: 'Install Terraform'
   inputs:
-    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-    regionName: '$(REGION)'
+    terraformVersion: 'latest'
+
+# 2. Initialize Terraform
+# Purpose: Initialize the backend to read the current state file from S3.
+- task: AWSShellScript@1
+  displayName: 'Terraform Init'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
     scriptType: 'inline'
     inlineScript: |
-      aws eks update-kubeconfig --region $(REGION) --name $(CLUSTER_NAME)
+      cd $(TF_DIR)
+      terraform init
+
+# 3. Configure Kubeconfig
+# Purpose: Authenticate with the EKS cluster to allow Helm deployments.
+- task: AWSShellScript@1
+  displayName: 'Update Kubeconfig'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      cd $(TF_DIR)
+      # Retrieve cluster name dynamically from Terraform outputs
+      CLUSTER_NAME=$(terraform output -raw cluster_name)
+      echo "Connecting to cluster: $CLUSTER_NAME"
+      aws eks update-kubeconfig --name "$CLUSTER_NAME" --region $(AWS_REGION)
+
+# 4. Install Helm
+# Purpose: Package manager required to install Nginx Ingress, ArgoCD, etc.
+- task: HelmInstaller@1
+  displayName: 'Install Helm'
+  inputs:
+    helmVersionToInstall: 'latest'
+
+# 5. Install Nginx Ingress Controller
+# Purpose: Deploys the Ingress Controller which automatically provisions
+# the AWS Network Load Balancer (NLB).
+- task: AWSShellScript@1
+  displayName: 'Install Nginx Ingress Controller'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      echo "Installing Nginx Ingress..."
       
-      # 1. Nginx Ingress Controller
+      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      helm repo update
+
+      # Install with LoadBalancer type to trigger AWS NLB creation
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" --wait
+        --set controller.service.type=LoadBalancer \
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+        --wait --timeout 10m
 
-      # 2. Argo CD
-      kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# 6. Install ArgoCD
+# Purpose: GitOps tool for continuous delivery.
+# Configures Ingress rule directly via Helm values.
+- task: AWSShellScript@1
+  displayName: 'Install ArgoCD'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      echo "Installing ArgoCD..."
+      
+      helm repo add argo https://argoproj.github.io/argo-helm
+      helm repo update
 
-      # 3. SonarQube 
+      # Generate values file to configure Ingress for ArgoCD
+      cat <<EOF > argocd-values.yaml
+      server:
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          hosts:
+            - ""
+          paths:
+            - /argocd
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        extraArgs:
+          - --insecure
+          - --rootpath=/argocd
+      EOF
+
+      helm upgrade --install argocd argo/argo-cd \
+        --namespace argocd --create-namespace \
+        --values argocd-values.yaml \
+        --wait
+
+# 7. Install SonarQube (Optional)
+# Purpose: Code quality analysis tool.
+- task: AWSShellScript@1
+  displayName: 'Install SonarQube'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      echo "Installing SonarQube..."
       helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
       helm repo update
+
+      cat <<EOF > sonar-values.yaml
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - name: ""
+            path: "/sonarqube"
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+      sonarWebContext: /sonarqube
+      EOF
+
       helm upgrade --install sonarqube sonarqube/sonarqube \
         --namespace sonarqube --create-namespace \
-        --set service.type=ClusterIP \
-        --set ingress.enabled=true \
-        --set ingress.ingressClassName=nginx \
-        --set ingress.hosts[0].name="" \
-        --set ingress.hosts[0].path="/sonarqube" --wait
+        --values sonar-values.yaml \
+        --wait --timeout 10m
+
+# 8. Update Terraform with Real DNS
+# Purpose: Fetch the AWS Load Balancer DNS generated by Nginx Ingress,
+# update the Terraform variable, and apply changes to link API Gateway.
+- task: AWSShellScript@1
+  displayName: 'Update Terraform with Real DNS'
+  inputs:
+    awsCredentials: $(AWS_SERVICE_CONNECTION)
+    regionName: $(AWS_REGION)
+    scriptType: 'inline'
+    inlineScript: |
+      cd $(TF_DIR)
+      
+      echo "Fetching Load Balancer DNS from Kubernetes Service..."
+      # Query Kubernetes to get the AWS Load Balancer Hostname
+      NLB_DNS=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+      
+      echo "Found NLB DNS: $NLB_DNS"
+      
+      if [ -z "$NLB_DNS" ]; then
+        echo "##[error] Failed to get NLB DNS! Check if Nginx Controller is running."
+        exit 1
+      fi
+
+      # Update the variables file: Replace placeholder with real DNS
+      echo "Updating variables file with real DNS..."
+      sed -i "s|http://google.com|http://$NLB_DNS|g" $(TF_VAR_FILE)
+      
+      # Also update main variables.tf if default value was used
+      sed -i "s|http://google.com|http://$NLB_DNS|g" variables.tf
+
+      echo "Applying Terraform changes to link API Gateway with NLB..."
+      
+      # Re-apply Terraform to update API Gateway Integration
+      terraform apply -var-file="$(TF_VAR_FILE)" -auto-approve

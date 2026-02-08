@@ -1,9 +1,3 @@
-variable "project_name" {
-  description = "Project name prefix"
-  type        = string
-}
-
-variable "vpc_id" {
-  description = "ID of the VPC"
-  type        = string
-}
+variable "project_name" { type = string }
+variable "vpc_id" { type = string }
+variable "tags" { type = map(string) }

@@ -1,4 +1,4 @@
-# 1. EKS Cluster Control Plane Role
+# 1. EKS Cluster Role (Control Plane)
 resource "aws_iam_role" "cluster_role" {
   name = "${var.project_name}-cluster-role"
 
@@ -19,7 +19,7 @@ resource "aws_iam_role_policy_attachment" "cluster_policy" {
   role       = aws_iam_role.cluster_role.name
 }
 
-# 2. EKS Managed Node Group Role
+# 2. Worker Node Role (Data Plane)
 resource "aws_iam_role" "node_role" {
   name = "${var.project_name}-node-role"
 
@@ -35,13 +35,13 @@ resource "aws_iam_role" "node_role" {
   tags = var.tags
 }
 
-# 3. Standard Node Policies (Worker, CNI, ECR, SSM)
+# Attach Necessary Policies for Nodes
 resource "aws_iam_role_policy_attachment" "node_policies" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess" 
+    "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess" # Useful for debugging
   ])
   policy_arn = each.value
   role       = aws_iam_role.node_role.name

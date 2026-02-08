@@ -1,10 +1,2 @@
-variable "project_name" {
-  description = "Project name prefix"
-  type        = string
-}
-
-variable "tags" {
-  description = "Common tags for all resources"
-  type        = map(string)
-  default     = {}
-}
+variable "project_name" { type = string }
+variable "tags" { type = map(string) }
