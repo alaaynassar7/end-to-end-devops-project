@@ -44,5 +44,3 @@ steps:
         --set ingress.ingressClassName=nginx \
         --set ingress.hosts[0].name="" \
         --set ingress.hosts[0].path="/sonarqube" --wait
-        --set ingress.enabled=false \
-        --wait

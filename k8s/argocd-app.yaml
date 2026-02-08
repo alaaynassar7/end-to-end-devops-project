@@ -1,11 +1,23 @@
-ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/rewrite-target: /
-  hosts:
-    - host: "" 
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: motivational-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/alaaynassar7/end-to-end-devops-project.git'
+    targetRevision: main
+    path: helm-charts/motivational-app
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

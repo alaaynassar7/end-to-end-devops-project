@@ -1,34 +1,11 @@
-replicaCount: 1
-
-image:
-  repository: 548135082630.dkr.ecr.us-east-1.amazonaws.com/motivational-app
-  pullPolicy: Always
-  tag: "2105"
-
-service:
-  type: ClusterIP
-  port: 80
-  targetPort: 5000 
-
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-livenessProbe:
-  httpGet:
-    path: /
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-
-readinessProbe:
-  httpGet:
-    path: /
-    port: http
-  initialDelaySeconds: 10
-  periodSeconds: 10
-
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: "" 
+      paths:
+        - path: /  
+          pathType: ImplementationSpecific
