@@ -56,13 +56,13 @@ resource "aws_eks_node_group" "main" {
 }
 
 # 3. EBS CSI Driver Addon (Required for Storage/Database)
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name                = aws_eks_cluster.main.name
-  addon_name                  = "aws-ebs-csi-driver"
+#resource "aws_eks_addon" "ebs_csi_driver" {
+#  cluster_name                = aws_eks_cluster.main.name
+#  addon_name                  = "aws-ebs-csi-driver"
   
   # Automatic version selection
-  addon_version               = null 
-  resolve_conflicts_on_create = "OVERWRITE"
+#  addon_version               = null 
+#  resolve_conflicts_on_create = "OVERWRITE"
   
-  depends_on = [aws_eks_node_group.main]
-}
+#  depends_on = [aws_eks_node_group.main]
+#}
