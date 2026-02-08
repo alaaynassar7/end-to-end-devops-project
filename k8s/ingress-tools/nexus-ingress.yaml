@@ -5,11 +5,11 @@ metadata:
   namespace: nexus
   annotations:
     kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
 spec:
   rules:
-  - host: "ad22f48977c87461aa8a9364faa608ee-19978a9a7b3f723f.elb.us-east-1.amazonaws.com"
+  - host: "" 
     http:
       paths:
       - path: /nexus

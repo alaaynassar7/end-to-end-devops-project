@@ -1,73 +1,48 @@
 trigger: none 
-
 variables:
   AWS_SERVICE_CONNECTION: 'alaa-aws'
   REGION: 'us-east-1'
   CLUSTER_NAME: 'alaa-devops-project-cluster'
 
 pool:
-  name: 'Self hosted pools'  
+  name: 'Self hosted pools'
   demands:
    - Agent.Name -equals alaaynassar-VMware 
 
 steps:
-# Step 1: Clone the source code into the pipeline workspace
 - checkout: self
-
-# Step 2: Install required CLI tools (Helm & Kubectl) on the agent
 - task: HelmInstaller@0
-  displayName: 'Setup Tooling'
   inputs:
     helmVersion: 'latest'
     installKubectl: true
 
-# Step 3: Deployment of Cluster Add-ons and Access Configuration
 - task: AWSShellScript@1
-  displayName: 'Deploy Cluster Tools'
+  displayName: 'Install Nginx, ArgoCD & SonarQube'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(REGION)'
     scriptType: 'inline'
     inlineScript: |
-      # 1. AUTHENTICATION: Configure kubectl to communicate with EKS
-      echo "Retrieving EKS credentials..."
       aws eks update-kubeconfig --region $(REGION) --name $(CLUSTER_NAME)
       
-      # 2. VALIDATION: Verify that worker nodes are active and reachable
-      echo "Verifying cluster nodes..."
-      kubectl get nodes
-
-      # 3. INGRESS: Deploy Nginx Ingress Controller using Helm
-      # This provides entry points to the cluster services via an AWS NLB
-      echo "Installing Nginx Ingress Controller..."
-      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-      helm repo update
-      
+      # 1. Nginx Ingress Controller
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-        --wait
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" --wait
 
-      # 4. GitOps: Install Argo CD for continuous deployment management
-      echo "Installing Argo CD..."
+      # 2. Argo CD
       kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-      
-      # Wait for Argo CD server to be ready for use
-      echo "Waiting for Argo CD availability..."
-      kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 
-      # 5. OUTPUTS: Capture crucial information for the next integration steps
-      echo "------------------------------------------------------------"
-      echo "DEPLOYMENT COMPLETE"
-      echo "------------------------------------------------------------"
-      
-      # Retrieve Load Balancer DNS for API Gateway integration
-      echo "Load Balancer DNS Name:"
-      kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-      echo -e "\n"
-
-      # Retrieve the auto-generated ArgoCD admin password
-      echo "ArgoCD Initial Admin Password:"
-      kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-      echo -e "\n"
+      # 3. SonarQube 
+      helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
+      helm repo update
+      helm upgrade --install sonarqube sonarqube/sonarqube \
+        --namespace sonarqube --create-namespace \
+        --set service.type=ClusterIP \
+        --set ingress.enabled=true \
+        --set ingress.ingressClassName=nginx \
+        --set ingress.hosts[0].name="" \
+        --set ingress.hosts[0].path="/sonarqube" --wait
+        --set ingress.enabled=false \
+        --wait

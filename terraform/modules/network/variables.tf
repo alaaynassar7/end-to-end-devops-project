@@ -1,30 +1,30 @@
 variable "project_name" {
-  description = "Project name prefix for resource naming"
+  description = "Project name prefix"
   type        = string
 }
 
 variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
+  description = "VPC CIDR block"
   type        = string
   default     = "10.0.0.0/16"
 }
 
 variable "public_cidrs" {
-  description = "List of CIDR blocks for public subnets"
+  description = "Public subnet CIDR list"
   type        = list(string)
 }
 
 variable "private_cidrs" {
-  description = "List of CIDR blocks for private subnets"
+  description = "Private subnet CIDR list"
   type        = list(string)
 }
 
 variable "azs" {
-  description = "List of availability zones to use"
+  description = "Availability Zones list"
   type        = list(string)
 }
 
 variable "tags" {
-  description = "Resource tags to be applied to all networking components"
+  description = "Standard project tags"
   type        = map(string)
 }

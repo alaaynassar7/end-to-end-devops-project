@@ -28,6 +28,11 @@ variable "azs" {
   default = ["us-east-1a", "us-east-1b"]
 }
 
+variable "environment" {
+  type    = string
+  default = "non-prod"
+}
+
 variable "tags" {
   type = map(string)
   default = {
@@ -41,5 +46,5 @@ variable "tags" {
 variable "integration_uri" {
   type        = string
   default     = ""
-  description = "Leave empty for the first run"
+  description = "Target URI for the API Integration (NLB DNS)"
 }

@@ -1,26 +1,18 @@
-trigger:
-- none
-
+trigger: none
 parameters:
 - name: environment
-  displayName: 'Select Environment'
+  displayName: 'Environment'
   type: string
   default: 'nonprod'
-  values:
-  - nonprod
-  - prod
-
+  values: [nonprod, prod]
 - name: terraformAction
-  displayName: 'Select Terraform Action'
+  displayName: 'Action'
   type: string
   default: 'plan'
-  values:
-  - plan
-  - apply
-  - destroy
+  values: [plan, apply, destroy]
 
 pool:
-  name: 'Self hosted pools'  
+  name: 'Self hosted pools'
   demands:
    - Agent.Name -equals alaaynassar-VMware 
 
@@ -30,7 +22,6 @@ variables:
   BUCKET_NAME: 'end-to-end-devops-project-bucket'
   REGION: 'us-east-1'
   ACTION_VALUE: ${{ parameters.terraformAction }}
-  
   ${{ if eq(parameters.environment, 'prod') }}:
     STATE_KEY: 'infra/prod/terraform.tfstate'
     VAR_FILE: 'prod.tfvars'
@@ -38,69 +29,26 @@ variables:
     STATE_KEY: 'infra/nonprod/terraform.tfstate'
     VAR_FILE: 'nonprod.tfvars'
 
-stages:
-- stage: TerraformExecution
-  displayName: 'Terraform Execution'
-  jobs:
-  - job: TerraformJob
-    steps:
-    - checkout: self
-      clean: true
-
-    - task: TerraformInstaller@1
-      displayName: 'Install Terraform'
-      inputs:
-        terraformVersion: 'latest'
-
-    # Step 1: Initialization (Always runs)
-    - task: AWSShellScript@1
-      displayName: 'Terraform Init'
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          rm -rf .terraform
-          terraform init \
-            -backend-config="bucket=$(BUCKET_NAME)" \
-            -backend-config="key=$(STATE_KEY)" \
-            -backend-config="region=$(REGION)" \
-            -reconfigure
-
-    # Step 2: Run Plan (Runs if Action is 'plan' OR 'apply')
-    - task: AWSShellScript@1
-      displayName: 'Terraform Plan'
-      condition: or(eq(variables['ACTION_VALUE'], 'plan'), eq(variables['ACTION_VALUE'], 'apply'))
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          terraform plan -var-file="$(VAR_FILE)" -out=tfplan
-
-    # Step 3: Run Apply (ONLY runs if Action is 'apply')
-    - task: AWSShellScript@1
-      displayName: 'Terraform Apply'
-      condition: eq(variables['ACTION_VALUE'], 'apply')
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
-          # We use the plan file generated in the previous step
-          terraform apply "tfplan"
-
-    # Step 4: Run Destroy (ONLY runs if Action is 'destroy')
-    - task: AWSShellScript@1
-      displayName: 'Terraform Destroy'
-      condition: eq(variables['ACTION_VALUE'], 'destroy')
-      inputs:
-        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
-        regionName: '$(REGION)'
-        scriptType: 'inline'
-        inlineScript: |
-          cd $(WORKING_DIR)
+jobs:
+- job: TerraformJob
+  steps:
+  - checkout: self
+  - task: TerraformInstaller@1
+    inputs:
+      terraformVersion: 'latest'
+  - task: AWSShellScript@1
+    displayName: 'Terraform Run'
+    inputs:
+      awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+      regionName: '$(REGION)'
+      scriptType: 'inline'
+      inlineScript: |
+        cd $(WORKING_DIR)
+        terraform init -backend-config="bucket=$(BUCKET_NAME)" -backend-config="key=$(STATE_KEY)" -backend-config="region=$(REGION)" -reconfigure
+        if [ "$(ACTION_VALUE)" == "plan" ]; then
+          terraform plan -var-file="$(VAR_FILE)"
+        elif [ "$(ACTION_VALUE)" == "apply" ]; then
+          terraform apply -var-file="$(VAR_FILE)" -auto-approve
+        elif [ "$(ACTION_VALUE)" == "destroy" ]; then
           terraform destroy -var-file="$(VAR_FILE)" -auto-approve
+        fi

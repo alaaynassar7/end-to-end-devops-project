@@ -10,7 +10,7 @@ variable "tags" {
 }
 
 variable "force_delete" {
-  description = "If true, allows deleting the repository even if it contains images"
+  description = "Force deletion of repository even if images exist"
   type        = bool
   default     = true
 }

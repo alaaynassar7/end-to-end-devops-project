@@ -1,6 +1,7 @@
-# --- EKS Cluster Role ---
+# 1. EKS Cluster Control Plane Role
 resource "aws_iam_role" "cluster_role" {
   name = "${var.project_name}-cluster-role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -9,6 +10,8 @@ resource "aws_iam_role" "cluster_role" {
       Principal = { Service = "eks.amazonaws.com" }
     }]
   })
+
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "cluster_policy" {
@@ -16,9 +19,10 @@ resource "aws_iam_role_policy_attachment" "cluster_policy" {
   role       = aws_iam_role.cluster_role.name
 }
 
-# --- EKS Node Group Role ---
+# 2. EKS Managed Node Group Role
 resource "aws_iam_role" "node_role" {
   name = "${var.project_name}-node-role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -27,9 +31,11 @@ resource "aws_iam_role" "node_role" {
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
+
+  tags = var.tags
 }
 
-# Attach Standard Policies + SSM for MongoDB Secrets (Step 7 in your plan)
+# 3. Standard Node Policies (Worker, CNI, ECR, SSM)
 resource "aws_iam_role_policy_attachment" "node_policies" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
