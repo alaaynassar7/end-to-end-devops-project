@@ -10,8 +10,7 @@ public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 private_cidrs = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 
 # 3. Integration Configuration (Placeholder for Pass 1)
-integration_uri = "http://google.com"
-
+integration_uri = "http://10.0.5.250:31008"
 # 4. Project Tagging
 tags = {
   Environment = "non-prod"
