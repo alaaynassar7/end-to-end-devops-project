@@ -57,5 +57,8 @@ module "api_gateway" {
   integration_uri   = var.integration_uri
   cognito_client_id = module.cognito.client_id
   cognito_endpoint  = module.cognito.user_pool_endpoint
+  subnet_ids        = module.network.private_subnet_ids
+  node_sg_id        = module.security_groups.node_sg_id
   tags              = var.tags
 }
+

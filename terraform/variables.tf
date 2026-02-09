@@ -1,22 +1,17 @@
-variable "project_name" { default = "alaa-devops-project" }
-variable "region" { default = "us-east-1" }
-variable "environment" { default = "non-prod" }
-variable "vpc_cidr" { default = "10.0.0.0/16" }
-variable "public_cidrs" { default = ["10.0.1.0/24", "10.0.2.0/24"] }
-variable "private_cidrs" { default = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"] }
-variable "azs" { default = ["us-east-1a", "us-east-1b"] }
+variable "project_name" { type = string }
+variable "region"       { type = string }
+variable "environment"  { type = string }
+variable "vpc_cidr"     { type = string }
+variable "public_cidrs" { type = list(string) }
+variable "private_cidrs" { type = list(string) }
+variable "azs"           { type = list(string) }
 
 variable "tags" {
-  default = {
-    Project     = "End-to-End-DevOps"
-    Environment = "non-prod"
-    Owner       = "Alaa-Nassar"
-    ManagedBy   = "Terraform"
-  }
+  type        = map(string)
+  description = "Resource tags provided via tfvars"
 }
 
 variable "integration_uri" {
-  # Placeholder until Ingress Controller creates the NLB
-  default     = "http://google.com" 
-  description = "Target URI for API Gateway"
+  type        = string
+  description = "Target URI for API Gateway - Provided via tfvars (Use http://google.com for first run)"
 }

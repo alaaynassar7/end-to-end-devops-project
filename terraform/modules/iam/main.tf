@@ -46,3 +46,25 @@ resource "aws_iam_role_policy_attachment" "node_policies" {
   policy_arn = each.value
   role       = aws_iam_role.node_role.name
 }
+
+# 3. Add ELB Permissions to Node Role (Fix for LoadBalancer Pending state)
+resource "aws_iam_role_policy" "node_elb" {
+  name = "${var.project_name}-node-elb-policy"
+  role = aws_iam_role.node_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeAccountAttributes",
+          "ec2:DescribeAddresses",
+          "ec2:DescribeInternetGateways",
+          "elasticloadbalancing:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}

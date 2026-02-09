@@ -1,6 +1,7 @@
 # 1. Project Identity
 project_name = "alaa-devops-project"
 region       = "us-east-1"
+environment  = "nonprod" 
 
 # 2. Networking Configuration
 vpc_cidr      = "10.0.0.0/16"

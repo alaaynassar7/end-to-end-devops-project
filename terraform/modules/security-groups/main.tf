@@ -86,3 +86,14 @@ resource "aws_security_group_rule" "node_egress" {
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.node.id
 }
+
+# Allow API Gateway (via VPC Link) to reach Worker Nodes on the specific NodePort
+resource "aws_security_group_rule" "node_ingress_api_gateway" {
+  type              = "ingress"
+  from_port         = 31008
+  to_port           = 31008
+  protocol          = "tcp"
+  # This allows traffic from within the VPC (where the VPC Link sits)
+  cidr_blocks       = ["10.0.0.0/16"] 
+  security_group_id = aws_security_group.node.id
+}
