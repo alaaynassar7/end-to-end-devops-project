@@ -53,7 +53,20 @@ jobs:
     inputs:
       terraformVersion: 'latest'
 
-  # 2. Run Terraform Commands
+  # 2. Ensure S3 Backend Bucket Exists
+  - task: AWSShellScript@1
+    displayName: 'Ensure S3 Backend Bucket'
+    inputs:
+      awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+      regionName: '$(REGION)'
+      scriptType: 'inline'
+      inlineScript: |
+        if ! aws s3api head-bucket --bucket "$(BUCKET_NAME)" 2>/dev/null; then
+          echo "Bucket $(BUCKET_NAME) does not exist. Creating..."
+          aws s3api create-bucket --bucket "$(BUCKET_NAME)" --region "$(REGION)"
+        fi
+
+  # 3. Run Terraform Commands
   - task: AWSShellScript@1
     displayName: 'Terraform Run'
     inputs:

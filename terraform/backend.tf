@@ -1,6 +1,6 @@
 terraform {
   backend "s3" {
-    bucket = "cd"
+    bucket = "alaa-devops-project-terraform-state"
     key    = "terraform.tfstate"                   
     region = "us-east-1"
     encrypt = true
