@@ -1,10 +1,10 @@
 resource "aws_apigatewayv2_api" "main" {
-  name          = "${var.project_name}-http"
+  name          = "${var.project_name}-http-api"
   protocol_type = "HTTP"
 }
 
 resource "aws_apigatewayv2_vpc_link" "main" {
-  name               = "${var.project_name}-link"
+  name               = "${var.project_name}-vpc-link"
   security_group_ids = [var.node_sg_id]
   subnet_ids         = var.subnet_ids
 }
@@ -12,12 +12,13 @@ resource "aws_apigatewayv2_vpc_link" "main" {
 resource "aws_apigatewayv2_integration" "main" {
   api_id           = aws_apigatewayv2_api.main.id
   integration_type = "HTTP_PROXY"
-  integration_uri  = var.integration_uri
-  connection_type  = "VPC_LINK"
-  connection_id    = aws_apigatewayv2_vpc_link.main.id
+  integration_uri  = var.integration_uri # "http://10.0.x.x:31008"
+  
+  integration_method = "ANY"
+  connection_type    = "INTERNET" 
+  
   payload_format_version = "1.0"
 }
-
 resource "aws_apigatewayv2_route" "main" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /{proxy+}"
