@@ -1,7 +1,6 @@
 resource "aws_cognito_user_pool" "main" {
   name = "${var.project_name}-user-pool"
 
-  # Simplified configuration for project scope
   password_policy {
     minimum_length    = 8
     require_lowercase = true
@@ -17,9 +16,7 @@ resource "aws_cognito_user_pool" "main" {
 resource "aws_cognito_user_pool_client" "client" {
   name         = "app-client"
   user_pool_id = aws_cognito_user_pool.main.id
-  
-  # No secret needed for SPA/Mobile apps usually, but generating one is fine
-  generate_secret = false 
+    generate_secret = false 
   
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",

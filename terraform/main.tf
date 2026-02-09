@@ -41,7 +41,6 @@ module "ecr" {
   project_name = var.project_name
   tags         = var.tags
 }
-
 # 6. Authentication
 module "cognito" {
   source       = "./modules/cognito"
@@ -51,9 +50,11 @@ module "cognito" {
 }
 
 module "api_gateway" {
-  source          = "./modules/api-gateway"
-  project_name    = var.project_name
-  integration_uri = var.integration_uri
-  subnet_ids      = module.network.private_subnet_ids
-  node_sg_id      = module.security_groups.node_sg_id
+  source           = "./modules/api-gateway"
+  project_name     = var.project_name
+  integration_uri  = var.integration_uri
+  subnet_ids       = module.network.private_subnet_ids
+  node_sg_id       = module.security_groups.node_sg_id
+  cognito_client_id  = var.cognito_client_id
+  cognito_issuer_url = var.cognito_issuer_url
 }

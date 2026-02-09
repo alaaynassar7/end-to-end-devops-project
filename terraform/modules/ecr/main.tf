@@ -1,7 +1,7 @@
 resource "aws_ecr_repository" "main" {
   name                 = "${var.project_name}-repo"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true # Allows deletion even if images exist
+  force_delete         = true 
 
   image_scanning_configuration {
     scan_on_push = true

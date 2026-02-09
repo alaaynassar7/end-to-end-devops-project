@@ -41,6 +41,13 @@ steps:
     inlineScript: |
       set -euo pipefail
 
+      # Pre-requisite: Add Helm Repositories
+      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      helm repo add datadog https://helm.datadoghq.com
+      helm repo add external-secrets https://charts.external-secrets.io
+      helm repo add hashicorp https://helm.releases.hashicorp.com
+      helm repo update
+
       # A. Install Nginx Ingress Controller (Load Balancer Entry Point)
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
@@ -66,6 +73,12 @@ steps:
       # D. Install GitOps & Security Tools (ArgoCD, Vault, MongoDB)
       helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.resources.requests.memory=200Mi
       helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
+      
+      # E. Install External Secrets Operator (Step 7 Requirement)
+      helm upgrade --install external-secrets external-secrets/external-secrets \
+        --namespace external-secrets --create-namespace \
+        --set installCRDs=true
+
       helm upgrade --install mongodb bitnami/mongodb --namespace database --create-namespace --set persistence.enabled=false
 
 # Step 3: Automation - Link Load Balancer DNS to AWS API Gateway
@@ -78,6 +91,16 @@ steps:
     inlineScript: |
       echo "Retrieving NLB DNS..."
       sleep 60 # Wait for DNS to be provisioned by AWS
+      
+      # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
+      timeout=300
+      end=$((SECONDS + timeout))
+      while [ -z "$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
+        if [ $SECONDS -ge $end ]; then echo "Timed out waiting for NLB DNS"; exit 1; fi
+        echo "Waiting for NLB DNS..."
+        sleep 10
+      done
+      
       NLB_DNS=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
       
       if [ ! -z "$NLB_DNS" ]; then
@@ -91,11 +114,11 @@ steps:
         terraform apply -var-file="nonprod.tfvars" -auto-approve
         
         # GitOps: Push updated tfvars back to repository
-        git config --global user.email "alaa@nti.com"
+        git config --global user.email "alaaynassar7@gmail.com"
         git config --global user.name "Alaa-Tools-Bot"
         git add nonprod.tfvars
         git commit -m "chore: update NLB DNS in tfvars [skip ci]"
-        git push https://$(MY_PAT)@dev.azure.com/higgyomar/NTI_PROJECT/_git/NTI_PROJECT HEAD:main
+        git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
       else
         echo "Error: NLB DNS could not be retrieved."
         exit 1

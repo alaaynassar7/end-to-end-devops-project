@@ -13,5 +13,12 @@ variable "tags" {
 
 variable "integration_uri" {
   type        = string
-  description = "Target URI for API Gateway - Provided via tfvars (Use http://google.com for first run)"
+  description = "Target URI for API Gateway - Provided via tfvars "
+}
+variable "cognito_client_id" {
+  type = string
+}
+
+variable "cognito_issuer_url" {
+  type = string
 }
