@@ -1,49 +1,31 @@
-# 1. REST API Definition
-resource "aws_api_gateway_rest_api" "main" {
-  name = "${var.project_name}-api"
+resource "aws_apigatewayv2_api" "main" {
+  name          = "${var.project_name}-http"
+  protocol_type = "HTTP"
 }
 
-# 2. VPC Link (استخدام النوع ده بيحل مشكلة الـ NLB ARN)
-resource "aws_api_gateway_vpc_link" "eks" {
-  name        = "${var.project_name}-vpc-link"
-  target_arns = [var.node_sg_arn] 
-}
-# 3. Resource & Method
-resource "aws_api_gateway_resource" "proxy" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
-  path_part   = "{proxy+}"
+resource "aws_apigatewayv2_vpc_link" "main" {
+  name               = "${var.project_name}-link"
+  security_group_ids = [var.node_sg_id]
+  subnet_ids         = var.subnet_ids
 }
 
-resource "aws_api_gateway_method" "any" {
-  rest_api_id   = aws_api_gateway_rest_api.main.id
-  resource_id   = aws_api_gateway_resource.proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
+resource "aws_apigatewayv2_integration" "main" {
+  api_id           = aws_apigatewayv2_api.main.id
+  integration_type = "HTTP_PROXY"
+  integration_uri  = var.integration_uri
+  connection_type  = "VPC_LINK"
+  connection_id    = aws_apigatewayv2_vpc_link.main.id
+  payload_format_version = "1.0"
 }
 
-# 4. Integration
-resource "aws_api_gateway_integration" "main" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  resource_id = aws_api_gateway_resource.proxy.id
-  http_method = aws_api_gateway_method.any.http_method
-  
-  type                    = "HTTP_PROXY"
-  integration_http_method = "ANY"
-  uri                     = "${var.integration_uri}/{proxy}"
-  
-  connection_type = "VPC_LINK"
-  connection_id   = aws_api_gateway_vpc_link.eks.id
+resource "aws_apigatewayv2_route" "main" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.main.id}"
 }
 
-# 5. Deployment & Stage
-resource "aws_api_gateway_deployment" "main" {
-  depends_on  = [aws_api_gateway_integration.main]
-  rest_api_id = aws_api_gateway_rest_api.main.id
-}
-
-resource "aws_api_gateway_stage" "prod" {
-  deployment_id = aws_api_gateway_deployment.main.id
-  rest_api_id   = aws_api_gateway_rest_api.main.id
-  stage_name    = "prod"
+resource "aws_apigatewayv2_stage" "main" {
+  api_id      = aws_apigatewayv2_api.main.id
+  name        = "$default"
+  auto_deploy = true
 }

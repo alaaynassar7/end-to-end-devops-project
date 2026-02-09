@@ -54,6 +54,6 @@ module "api_gateway" {
   source          = "./modules/api-gateway"
   project_name    = var.project_name
   integration_uri = var.integration_uri
-  node_sg_arn     = module.security_groups.node_sg_arn
-  tags            = var.tags
+  subnet_ids      = module.network.private_subnet_ids
+  node_sg_id      = module.security_groups.node_sg_id
 }

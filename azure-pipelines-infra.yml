@@ -29,7 +29,7 @@ variables:
   # Global Variables
   AWS_SERVICE_CONNECTION: 'alaa-aws' 
   WORKING_DIR: 'terraform'
-  BUCKET_NAME: 'end-to-end-devops-project-bucket'
+  BUCKET_NAME: 'alaa-devops-project-terraform-state'
   REGION: 'us-east-1'
   ACTION_VALUE: ${{ parameters.terraformAction }}
   
@@ -48,14 +48,12 @@ jobs:
   - checkout: self
 
   # 1. Install Terraform
-  # Purpose: Ensure the specific version of Terraform is available on the agent.
   - task: TerraformInstaller@1
     displayName: 'Install Terraform'
     inputs:
       terraformVersion: 'latest'
 
   # 2. Run Terraform Commands
-  # Purpose: Initialize backend and execute the selected action (Plan/Apply/Destroy).
   - task: AWSShellScript@1
     displayName: 'Terraform Run'
     inputs:
@@ -75,7 +73,6 @@ jobs:
         echo "------------------------------------------------"
 
         # Initialize Terraform with Dynamic Backend Configuration
-        # This allows switching between Prod and NonProd states dynamically.
         echo "Initializing Terraform..."
         terraform init \
           -backend-config="bucket=$(BUCKET_NAME)" \
