@@ -50,11 +50,11 @@ module "cognito" {
   tags         = var.tags
 }
 
-# 7. API Exposure (REST API Implementation)
+# 7. API Exposure
 module "api_gateway" {
-  source            = "./modules/api-gateway"
-  project_name      = var.project_name
-  integration_uri   = var.integration_uri
-  node_sg_arn       = module.security_groups.node_sg_arn 
-  tags              = var.tags
+  source          = "./modules/api-gateway"
+  project_name    = var.project_name
+  integration_uri = var.integration_uri
+  node_sg_arn     = module.security_groups.node_sg_arn 
+  tags            = var.tags
 }

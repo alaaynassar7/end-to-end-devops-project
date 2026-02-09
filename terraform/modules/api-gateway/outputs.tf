@@ -1,1 +1,3 @@
-output "api_endpoint" { value = aws_apigatewayv2_api.main.api_endpoint }
+output "api_endpoint" { 
+  value = aws_api_gateway_stage.prod.invoke_url 
+}
