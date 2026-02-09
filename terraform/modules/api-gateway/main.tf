@@ -1,15 +1,12 @@
-# 1. REST API Definition
 resource "aws_api_gateway_rest_api" "main" {
   name = "${var.project_name}-api"
 }
 
-# 2. VPC Link for REST API
 resource "aws_api_gateway_vpc_link" "eks" {
   name        = "${var.project_name}-vpc-link"
   target_arns = [var.node_sg_arn] 
 }
 
-# 3. API Resource & Method (Proxy all requests)
 resource "aws_api_gateway_resource" "proxy" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   parent_id   = aws_api_gateway_rest_api.main.root_resource_id
@@ -23,7 +20,6 @@ resource "aws_api_gateway_method" "any" {
   authorization = "NONE"
 }
 
-# 4. Integration (The tunnel to your NodePort)
 resource "aws_api_gateway_integration" "main" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   resource_id = aws_api_gateway_resource.proxy.id
@@ -31,13 +27,12 @@ resource "aws_api_gateway_integration" "main" {
   
   type                    = "HTTP_PROXY"
   integration_http_method = "ANY"
-  uri                     = "${var.integration_uri}/{proxy}"
+  uri                     = "${var.integration_uri}/{proxy}" # هيسحب الـ IP من الـ tfvars
   
   connection_type = "VPC_LINK"
   connection_id   = aws_api_gateway_vpc_link.eks.id
 }
 
-# 5. Deployment & Stage
 resource "aws_api_gateway_deployment" "main" {
   depends_on  = [aws_api_gateway_integration.main]
   rest_api_id = aws_api_gateway_rest_api.main.id
