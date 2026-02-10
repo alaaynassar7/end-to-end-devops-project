@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (The Robust Version 💪)
+# Step 2: Install Platform Tools via Helm (High Performance Mode 🚀)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -41,47 +41,45 @@ steps:
       helm repo update
 
       echo "--- 2. Installing Nginx Ingress Controller ---"
+      # Removed resource limits - Let it fly!
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
-        --set controller.resources.requests.memory=100Mi \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-        --wait
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
 
-      echo "--- 3. Installing Datadog Agent (Clean Install Strategy) ---"
-      # A. Create Secret Safely (Idempotent)
+      echo "--- 3. Installing Datadog Agent ---"
+      # A. Create Secret Safely
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
-      # B. CLEANUP: Remove any broken/zombie installation first
+      # B. CLEANUP: Remove old installation to avoid conflicts
       echo "Cleaning up old Datadog installations..."
       helm uninstall datadog-agent --namespace default || true
-      echo "Waiting for cleanup..."
-      sleep 20 # Give K8s time to terminate old pods
+      sleep 10
       
-      # C. Install Fresh Agent (with US5 & Cluster Checks)
+      # C. Install Fresh Agent (No Limits, No Wait)
       echo "Deploying Datadog Agent..."
       helm upgrade --install datadog-agent datadog/datadog \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
         --set datadog.clusterName=$(CLUSTER_NAME) \
         --set datadog.tags='env:nonprod' \
-        --set datadog.resources.requests.memory=256Mi \
-        --set datadog.resources.limits.memory=512Mi \
         --set datadog.clusterChecks.enabled=true \
         --set datadog.orchestratorExplorer.enabled=true \
         --set clusterAgent.enabled=true \
-        --set clusterAgent.replicas=1 \
-        --wait \
-        --debug
+        --set clusterAgent.replicas=1
 
       echo "--- 4. Installing SonarQube & Nexus ---"
+      # Removed persistence=false to allow data saving (optional, add back if you want ephemeral)
+      # Removed memory limits
       helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
-        --set persistence.enabled=false --set resources.requests.memory=600Mi --wait=false
+        --set persistence.enabled=false \
+        --wait=false
 
       helm upgrade --install nexus oteemo/sonatype-nexus --namespace nexus --create-namespace \
-        --set persistence.enabled=false --set nexus.resources.requests.memory=350Mi --wait=false
+        --set persistence.enabled=false \
+        --wait=false
 
       echo "--- 5. Installing GitOps & Security Tools ---"
-      helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.resources.requests.memory=200Mi
+      helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace
       helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
       
       echo "--- 6. Installing External Secrets & Database ---"
@@ -100,7 +98,7 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       echo "Retrieving NLB DNS..."
-      sleep 30 # Initial wait
+      sleep 30 
       
       # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
       timeout=300
@@ -119,11 +117,10 @@ steps:
         
         cd terraform
         
-        # Robust sed command to handle spaces
+        # Robust sed command
         sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
         # Apply Terraform changes
-        # Note: Assuming backend config is already handled or passed via vars
         terraform init -reconfigure
         terraform apply -var-file="nonprod.tfvars" -auto-approve
         
