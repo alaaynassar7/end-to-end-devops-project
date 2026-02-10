@@ -1,17 +1,9 @@
 name: $(Date:yyyyMMdd)$(Rev:.r)-DevOps-Tools-Infrastructure
-trigger: none # Manual trigger or after Infra Pipeline
+trigger: none 
 
 variables:
-  - group: 'My Vars' # Library containing DATADOG_API_KEY, MY_PAT, etc.
-  - name: AWS_SERVICE_CONNECTION
-    value: 'alaa-aws'
-  - name: AWS_REGION
-    value: 'us-east-1'
-  - name: CLUSTER_NAME
-    value: 'alaa-devops-project-cluster'
-  - name: TF_VAR_FILE
-    value: 'terraform/nonprod.tfvars'
-
+  - group: 'My Vars' 
+  
 pool:
   name: 'Self hosted pools'
   demands:
@@ -107,7 +99,7 @@ steps:
         echo "Updating Terraform variables with DNS: $NLB_DNS"
         cd terraform
         # Update integration_uri in tfvars file
-        sed -i "s|integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
+        sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
         # Apply Terraform changes to sync API Gateway
         terraform init -reconfigure
