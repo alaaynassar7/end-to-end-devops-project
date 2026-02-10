@@ -64,7 +64,7 @@ steps:
         --set clusterAgent.enabled=true \
         --set clusterAgent.replicas=1
 
-      echo "--- 3. Installing SonarQube (Bahi's Configuration) ---"
+      echo "--- 3. Installing SonarQube  ---"
       
       cat > sonarqube-values.yaml <<EOF
       monitoringPasscode: changeMe
