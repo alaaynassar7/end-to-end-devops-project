@@ -10,14 +10,9 @@ resource "aws_apigatewayv2_authorizer" "main" {
   name             = "alaa-devops-project-authorizer"
 
   jwt_configuration {
-    audience = [var.cognito_client_id]
-    issuer   = "https://${trimsuffix(replace(var.cognito_issuer_url, "^https://", ""), "/")}"
+    audience = [var.client_id]
+    issuer   = "https://cognito-idp.${var.region}.amazonaws.com/${var.user_pool_id}"
   }
-}
-resource "aws_apigatewayv2_vpc_link" "main" {
-  name               = "${var.project_name}-vpc-link"
-  security_group_ids = [var.node_sg_id]
-  subnet_ids         = var.subnet_ids
 }
 
 resource "aws_apigatewayv2_integration" "main" {

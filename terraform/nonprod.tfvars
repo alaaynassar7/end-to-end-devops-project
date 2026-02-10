@@ -10,7 +10,7 @@ public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 private_cidrs = ["10.0.3.0/24", "10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 
 # 3. Integration Configuration (Placeholder for Pass 1)
-integration_uri = "http://10.0.5.2:31008"
+integration_uri = "https://www.google.com"
 # 4. Project Tagging
 tags = {
   Environment = "non-prod"
@@ -18,7 +18,3 @@ tags = {
   Project     = "End-to-End-DevOps"
   ManagedBy   = "Terraform"
 }
-
-# 5. Authentication (Placeholders - Update with actual values)
-cognito_client_id  = "REPLACE_WITH_ACTUAL_CLIENT_ID"
-cognito_issuer_url = "cognito-idp.us-east-1.amazonaws.com/us-east-1_REPLACE_WITH_ACTUAL_USER_POOL_ID" 

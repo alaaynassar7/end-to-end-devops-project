@@ -1,10 +1,15 @@
-variable "cognito_client_id" {
-  description = "The Cognito App Client ID"
+variable "client_id" {
+  description = "The Cognito App Client ID from the Cognito module"
   type        = string
 }
 
-variable "cognito_issuer_url" {
-  description = "The Cognito User Pool Issuer URL"
+variable "user_pool_id" {
+  description = "The Cognito User Pool ID from the Cognito module"
+  type        = string
+}
+
+variable "region" {
+  description = "The AWS region for constructing the issuer URL"
   type        = string
 }
 
@@ -16,14 +21,4 @@ variable "project_name" {
 variable "integration_uri" {
   description = "The target URI for the API Gateway integration"
   type        = string
-}
-
-variable "node_sg_id" {
-  description = "The Security Group ID of the EKS nodes for VPC Link"
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "List of subnet IDs for the VPC Link"
-  type        = list(string)
 }
