@@ -9,10 +9,11 @@ variables:
     value: 'aws-alaa-2'
   - name: AWS_REGION
     value: 'eu-north-1'
+    
   - name: CLUSTER_NAME
-    value: 'alaa-eks-cluster'
+    value: 'alaa-devops-project-cluster'  
 
-  # 2. Terraform Backend Config (Required for Step 3)
+  # 2. Terraform Backend Config
   - name: TF_BUCKET_NAME
     value: 'alaa-devops-project-tf-state-v2'
   - name: TF_STATE_KEY
