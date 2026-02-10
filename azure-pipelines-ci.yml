@@ -1,4 +1,5 @@
 name: $(Date:yyyyMMdd)$(Rev:.r)-App-CI
+
 trigger:
   branches:
     include:
@@ -13,10 +14,9 @@ pool:
    - Agent.Name -equals alaaynassar-VMware
 
 variables:
-  AWS_SERVICE_CONNECTION: 'alaa-aws'
-  AWS_REGION: 'us-east-1'
-  # Make sure this matches the repo name created by Terraform
-  ECR_REPOSITORY_NAME: 'alaa-devops-project-repo' 
+  - group: 'My Vars'
+  - name: ECR_REPOSITORY_NAME
+    value: 'alaa-devops-project-repo' 
 
 steps:
 - checkout: self
@@ -26,10 +26,14 @@ steps:
   displayName: 'Login to ECR'
   inputs:
     awsCredentials: $(AWS_SERVICE_CONNECTION)
-    regionName: $(AWS_REGION)
+    regionName: $(AWS_REGION)                
     scriptType: 'inline'
     inlineScript: |
-      aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$(AWS_REGION).amazonaws.com
+      set -euo pipefail
+      
+      ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com
+      echo "Login Successful!"
 
 # 2. Build and Push Docker Image
 - task: AWSShellScript@1
@@ -39,18 +43,18 @@ steps:
     regionName: $(AWS_REGION)
     scriptType: 'inline'
     inlineScript: |
-      # Get Account ID dynamically
+      set -euo pipefail
+      
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       ECR_URI="$ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPOSITORY_NAME)"
       
-      echo "Building Docker Image for: $ECR_URI"
+      echo "Starting Build for: $ECR_URI"
       
       cd motivational-app
       
-      # Build with two tags: BuildID and latest
       docker build -t $ECR_URI:$(Build.BuildId) -t $ECR_URI:latest .
       
-      echo "Pushing images..."
+      echo "Pushing images to ECR..."
       docker push $ECR_URI:$(Build.BuildId)
       docker push $ECR_URI:latest
       

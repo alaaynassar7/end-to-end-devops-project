@@ -68,6 +68,17 @@ resource "aws_security_group_rule" "node_ingress_alb" {
   security_group_id        = aws_security_group.node.id
 }
 
+
+# Allow NLB (Internet) to reach Worker Nodes on NodePorts
+resource "aws_security_group_rule" "node_ingress_nlb" {
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.node.id
+}
+
 # Allow Control Plane to communicate with nodes
 resource "aws_security_group_rule" "node_ingress_cluster" {
   type              = "ingress"
