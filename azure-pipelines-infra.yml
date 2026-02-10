@@ -27,10 +27,13 @@ pool:
 
 variables:
   # Global Variables
-  AWS_SERVICE_CONNECTION: 'alaa-aws' 
+  AWS_SERVICE_CONNECTION: 'aws-alaa-2' 
+  
   WORKING_DIR: 'terraform'
-  BUCKET_NAME: 'alaa-devops-project-terraform-state'
-  REGION: 'us-east-1'
+  
+  BUCKET_NAME: 'alaa-devops-project-tf-state-v2' 
+  
+  REGION: 'eu-north-1'
   ACTION_VALUE: ${{ parameters.terraformAction }}
   
   # Dynamic Variables based on Environment Parameter
@@ -54,6 +57,7 @@ jobs:
       terraformVersion: 'latest'
 
   # 2. Ensure S3 Backend Bucket Exists
+  # This logic is perfect: It will create the NEW bucket in the NEW account if missing.
   - task: AWSShellScript@1
     displayName: 'Ensure S3 Backend Bucket'
     inputs:
@@ -63,7 +67,9 @@ jobs:
       inlineScript: |
         if ! aws s3api head-bucket --bucket "$(BUCKET_NAME)" 2>/dev/null; then
           echo "Bucket $(BUCKET_NAME) does not exist. Creating..."
-          aws s3api create-bucket --bucket "$(BUCKET_NAME)" --region "$(REGION)"
+          aws s3api create-bucket --bucket "$(BUCKET_NAME)" --region "$(REGION)" --create-bucket-configuration LocationConstraint="$(REGION)"
+        else
+          echo "Bucket $(BUCKET_NAME) already exists."
         fi
 
   # 3. Run Terraform Commands
@@ -83,6 +89,7 @@ jobs:
         echo "Environment: ${{ parameters.environment }}"
         echo "Action:      $(ACTION_VALUE)"
         echo "State Key:   $(STATE_KEY)"
+        echo "Bucket:      $(BUCKET_NAME)"
         echo "------------------------------------------------"
 
         # Initialize Terraform with Dynamic Backend Configuration

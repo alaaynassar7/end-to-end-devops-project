@@ -15,6 +15,12 @@ pool:
 
 variables:
   - group: 'My Vars'
+  
+  - name: AWS_SERVICE_CONNECTION
+    value: 'aws-alaa-2'
+  - name: AWS_REGION
+    value: 'eu-north-1'
+    
   - name: ECR_REPOSITORY_NAME
     value: 'alaa-devops-project-repo' 
 
@@ -31,6 +37,7 @@ steps:
     inlineScript: |
       set -euo pipefail
       
+      echo "Logging into ECR in region $(AWS_REGION)..."
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com
       echo "Login Successful!"
@@ -52,8 +59,10 @@ steps:
       
       cd motivational-app
       
+      # Build
       docker build -t $ECR_URI:$(Build.BuildId) -t $ECR_URI:latest .
       
+      # Push
       echo "Pushing images to ECR..."
       docker push $ECR_URI:$(Build.BuildId)
       docker push $ECR_URI:latest

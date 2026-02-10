@@ -1,9 +1,23 @@
 name: $(Date:yyyyMMdd)$(Rev:.r)-DevOps-Tools-Infrastructure
-trigger: none 
+trigger: none
 
 variables:
-  - group: 'My Vars' 
-  
+  - group: 'My Vars'
+
+  # 1. AWS Connection & Region
+  - name: AWS_SERVICE_CONNECTION
+    value: 'aws-alaa-2'
+  - name: AWS_REGION
+    value: 'eu-north-1'
+  - name: CLUSTER_NAME
+    value: 'alaa-eks-cluster'
+
+  # 2. Terraform Backend Config (Required for Step 3)
+  - name: TF_BUCKET_NAME
+    value: 'alaa-devops-project-tf-state-v2'
+  - name: TF_STATE_KEY
+    value: 'infra/nonprod/terraform.tfstate'
+
 pool:
   name: 'Self hosted pools'
   demands:
@@ -61,7 +75,8 @@ steps:
         --namespace ingress-nginx --create-namespace \
         --set controller.resources.requests.memory=100Mi \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing"
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internal" \
+        --wait
 
       echo "--- 4. Installing Datadog Agent ---"
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
@@ -105,6 +120,7 @@ steps:
         --repo https://SonarSource.github.io/helm-chart-sonarqube \
         --namespace sonarqube --create-namespace \
         --wait --timeout 10m \
+        --set jvmOpts="-Xmx1g -Xms512m" \
         -f sonarqube-values.yaml; then
            echo "❌ SonarQube installation failed. Fetching logs..."
            kubectl logs -n sonarqube -l app.kubernetes.io/name=sonarqube --tail=50
@@ -152,14 +168,14 @@ steps:
         --wait=false
 
 # Step 3: Automation - Link Internal LB to API Gateway via Terraform
-- task: AWSShellScript@1
-  displayName: 'Link API Gateway to Internal NLB'
+- task: AWSCLI@1
+  displayName: 'Fetch NLB ARN and Update tfvars'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
-    scriptType: 'inline'
+    scriptType: 'bash'
     inlineScript: |
-      echo "Retrieving Internal NLB DNS Name..."
+      echo "--- 1. Fetching Internal NLB Details ---"
       sleep 30 
       
       # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
@@ -174,25 +190,41 @@ steps:
       NLB_DNS=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
       
       if [ ! -z "$NLB_DNS" ]; then
-        echo "Updating Terraform variables with DNS: $NLB_DNS"
+        echo "Found NLB DNS: $NLB_DNS"
+        echo "Fetching NLB Listener ARN from AWS..."
+        
+        # 1. Get Load Balancer ARN using the DNS Name
+        LB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$NLB_DNS'].LoadBalancerArn" --output text)
+        
+        if [ -z "$LB_ARN" ]; then echo "❌ Error: Could not find Load Balancer ARN"; exit 1; fi
+        
+        # 2. Get Listener ARN (Targeting Port 80 for HTTP)
+        LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $LB_ARN --query "Listeners[?Port==\`80\`].ListenerArn" --output text)
+        
+        if [ -z "$LISTENER_ARN" ]; then echo "❌ Error: Could not find Listener ARN on port 80"; exit 1; fi
+        
+        echo "Updating Terraform variables with Listener ARN: $LISTENER_ARN"
         cd terraform
-        # Update integration_uri in tfvars file
-        sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
-        cd terraform
+        # Update nlb_listener_arn in tfvars file with the ARN
+        sed -i "s|^\s*nlb_listener_arn.*|nlb_listener_arn = \"$LISTENER_ARN\"|g" nonprod.tfvars
         
-        # Update tfvars with new Internal LB DNS
-        sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
-        
+        echo "--- 2. Applying Terraform Changes ---"
+        # Initialize Terraform with explicit Backend Config (Critical for new account)
+        terraform init \
+           -backend-config="bucket=$(TF_BUCKET_NAME)" \
+           -backend-config="key=$(TF_STATE_KEY)" \
+           -backend-config="region=$(AWS_REGION)" \
+           -reconfigure
+
         # Apply Terraform changes
-        terraform init -reconfigure
         terraform apply -var-file="nonprod.tfvars" -auto-approve
         
-        # GitOps: Push updated tfvars back to repository
+        echo "--- 3. GitOps: Syncing Changes to Repository ---"
         git config --global user.email "alaaynassar7@gmail.com"
         git config --global user.name "Alaa-Tools-Bot"
         git add nonprod.tfvars
-        git commit -m "chore: update Internal NLB DNS in tfvars [skip ci]"
+        git commit -m "chore: update Internal NLB ARN in tfvars [skip ci]" || echo "No changes to commit"
         git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
         
         echo "✅ Integration URI updated successfully!"
