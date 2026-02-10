@@ -7,7 +7,7 @@ resource "aws_apigatewayv2_authorizer" "main" {
   api_id           = aws_apigatewayv2_api.main.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name             = "${var.project_name}-authorizer"
+  name             = "alaa-devops-project-authorizer"
 
   jwt_configuration {
     audience = [var.cognito_client_id]
