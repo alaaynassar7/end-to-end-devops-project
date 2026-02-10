@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (Optimized for t3.small)
+# Step 2: Install Platform Tools via Helm (The Robust Version 💪)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -33,24 +33,32 @@ steps:
     inlineScript: |
       set -euo pipefail
 
-      # Pre-requisite: Add Helm Repositories
+      echo "--- 1. Adding Helm Repositories ---"
       helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
       helm repo add datadog https://helm.datadoghq.com
       helm repo add external-secrets https://charts.external-secrets.io
       helm repo add hashicorp https://helm.releases.hashicorp.com
       helm repo update
 
-      # A. Install Nginx Ingress Controller (Load Balancer Entry Point)
+      echo "--- 2. Installing Nginx Ingress Controller ---"
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
         --set controller.resources.requests.memory=100Mi \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+        --wait
 
-      # B. Install Datadog Agent (Updated for US5 & Cluster Checks)
-      # Create/Update Secret safely
+      echo "--- 3. Installing Datadog Agent (Clean Install Strategy) ---"
+      # A. Create Secret Safely (Idempotent)
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
-      # Install Agent with Orchestrator Explorer enabled
+      # B. CLEANUP: Remove any broken/zombie installation first
+      echo "Cleaning up old Datadog installations..."
+      helm uninstall datadog-agent --namespace default || true
+      echo "Waiting for cleanup..."
+      sleep 20 # Give K8s time to terminate old pods
+      
+      # C. Install Fresh Agent (with US5 & Cluster Checks)
+      echo "Deploying Datadog Agent..."
       helm upgrade --install datadog-agent datadog/datadog \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
@@ -62,20 +70,21 @@ steps:
         --set datadog.orchestratorExplorer.enabled=true \
         --set clusterAgent.enabled=true \
         --set clusterAgent.replicas=1 \
-        --wait
+        --wait \
+        --debug
 
-      # C. Install SonarQube & Nexus (No Persistence to save RAM)
+      echo "--- 4. Installing SonarQube & Nexus ---"
       helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
         --set persistence.enabled=false --set resources.requests.memory=600Mi --wait=false
 
       helm upgrade --install nexus oteemo/sonatype-nexus --namespace nexus --create-namespace \
         --set persistence.enabled=false --set nexus.resources.requests.memory=350Mi --wait=false
 
-      # D. Install GitOps & Security Tools (ArgoCD, Vault, MongoDB)
+      echo "--- 5. Installing GitOps & Security Tools ---"
       helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.resources.requests.memory=200Mi
       helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
       
-      # E. Install External Secrets Operator
+      echo "--- 6. Installing External Secrets & Database ---"
       helm upgrade --install external-secrets external-secrets/external-secrets \
         --namespace external-secrets --create-namespace \
         --set installCRDs=true
@@ -91,7 +100,7 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       echo "Retrieving NLB DNS..."
-      sleep 60 # Wait for DNS to be provisioned by AWS
+      sleep 30 # Initial wait
       
       # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
       timeout=300
@@ -105,13 +114,16 @@ steps:
       NLB_DNS=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
       
       if [ ! -z "$NLB_DNS" ]; then
-        echo "Updating Terraform variables with DNS: $NLB_DNS"
+        echo "Found NLB: $NLB_DNS"
+        echo "Updating Terraform variables..."
+        
         cd terraform
         
-        # Update integration_uri in tfvars file (Robust regex)
+        # Robust sed command to handle spaces
         sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
-        # Apply Terraform changes to sync API Gateway
+        # Apply Terraform changes
+        # Note: Assuming backend config is already handled or passed via vars
         terraform init -reconfigure
         terraform apply -var-file="nonprod.tfvars" -auto-approve
         
@@ -121,7 +133,9 @@ steps:
         git add nonprod.tfvars
         git commit -m "chore: update NLB DNS in tfvars [skip ci]"
         git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
+        
+        echo "✅ Integration URI updated successfully!"
       else
-        echo "Error: NLB DNS could not be retrieved."
+        echo "❌ Error: NLB DNS could not be retrieved."
         exit 1
       fi
