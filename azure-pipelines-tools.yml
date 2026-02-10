@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (High Performance Mode 🚀)
+# Step 2: Install Platform Tools via Helm (Corrected Repos ✅)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -33,30 +33,34 @@ steps:
     inlineScript: |
       set -euo pipefail
 
-      echo "--- 1. Adding Helm Repositories ---"
+      echo "--- 1. Adding ALL Helm Repositories ---"
+      # Load Balancer & Monitoring
       helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
       helm repo add datadog https://helm.datadoghq.com
+      
+      # Security & Secrets
       helm repo add external-secrets https://charts.external-secrets.io
       helm repo add hashicorp https://helm.releases.hashicorp.com
+      
+      # CI/CD & Code Quality (دول اللي كانوا ناقصين!) 👇
+      helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
+      helm repo add oteemo https://oteemo.github.io/charts  # For Nexus
+      helm repo add argo https://argoproj.github.io/argo-helm # For ArgoCD
+      helm repo add bitnami https://charts.bitnami.com/bitnami # For MongoDB
+      
       helm repo update
 
       echo "--- 2. Installing Nginx Ingress Controller ---"
-      # Removed resource limits - Let it fly!
       helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
 
       echo "--- 3. Installing Datadog Agent ---"
-      # A. Create Secret Safely
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
-      # B. CLEANUP: Remove old installation to avoid conflicts
-      echo "Cleaning up old Datadog installations..."
       helm uninstall datadog-agent --namespace default || true
-      sleep 10
+      sleep 5
       
-      # C. Install Fresh Agent (No Limits, No Wait)
-      echo "Deploying Datadog Agent..."
       helm upgrade --install datadog-agent datadog/datadog \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
@@ -68,8 +72,6 @@ steps:
         --set clusterAgent.replicas=1
 
       echo "--- 4. Installing SonarQube & Nexus ---"
-      # Removed persistence=false to allow data saving (optional, add back if you want ephemeral)
-      # Removed memory limits
       helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
         --set persistence.enabled=false \
         --wait=false
