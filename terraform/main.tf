@@ -55,8 +55,10 @@ module "api_gateway" {
   source           = "./modules/api-gateway"
   
   project_name     = var.project_name
-  integration_uri  = var.integration_uri
+  integration_uri = var.nlb_listener_arn  
   region           = var.region
   client_id        = module.cognito.client_id
   user_pool_id     = module.cognito.user_pool_id
+  vpc_link_security_group_id = module.security_groups.vpc_link_sg_id
+  private_subnet_ids         = module.network.private_subnet_ids
 }

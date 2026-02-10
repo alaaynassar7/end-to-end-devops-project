@@ -11,7 +11,8 @@ variable "tags" {
   description = "Resource tags provided via tfvars"
 }
 
-variable "integration_uri" {
+variable "nlb_listener_arn" {
   type        = string
-  description = "Target URI for API Gateway - Provided via tfvars"
+  description = "The ARN of the NLB Listener (Updated automatically by Pipeline)"
+  default     = "" #
 }

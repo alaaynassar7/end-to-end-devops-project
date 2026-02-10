@@ -72,9 +72,3 @@ resource "aws_iam_role_policy" "node_elb" {
     ]
   })
 }
-
-import {
-  to = aws_iam_role.cluster_role
-  id = "${var.project_name}-cluster-role"
-}
-

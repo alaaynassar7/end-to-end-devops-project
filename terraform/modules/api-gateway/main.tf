@@ -15,6 +15,12 @@ resource "aws_apigatewayv2_authorizer" "main" {
   }
 }
 
+resource "aws_apigatewayv2_vpc_link" "main" {
+  name               = "${var.project_name}-vpc-link"
+  security_group_ids = [var.vpc_link_security_group_id]
+  subnet_ids         = var.private_subnet_ids
+}
+
 resource "aws_apigatewayv2_integration" "main" {
   api_id           = aws_apigatewayv2_api.main.id
   integration_type = "HTTP_PROXY"
@@ -22,7 +28,8 @@ resource "aws_apigatewayv2_integration" "main" {
   
   integration_method = "ANY"
   
-  connection_type    = "INTERNET"
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.main.id
   
   payload_format_version = "1.0"
 }

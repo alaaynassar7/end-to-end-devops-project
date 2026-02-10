@@ -22,3 +22,13 @@ variable "integration_uri" {
   description = "The target URI for the API Gateway integration"
   type        = string
 }
+
+variable "vpc_link_security_group_id" {
+  description = "The Security Group ID for the VPC Link"
+  type        = string
+}
+
+variable "private_subnet_ids" {
+  description = "List of Private Subnet IDs for the VPC Link"
+  type        = list(string)
+}

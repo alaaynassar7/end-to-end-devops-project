@@ -1,16 +1,14 @@
-
 variable "project_name" {
-  description = "Project name to be used for naming resources"
+  description = "Project name prefix"
   type        = string
 }
 
 variable "environment" {
-  description = "Deployment environment (nonprod/prod)"
+  description = "Deployment environment (e.g., nonprod, prod)"
   type        = string
 }
 
 variable "tags" {
-  description = "Map of tags to apply to resources"
+  description = "Common tags to apply to resources"
   type        = map(string)
-  default     = {}
 }
