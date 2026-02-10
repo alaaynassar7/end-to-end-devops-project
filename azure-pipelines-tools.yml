@@ -3,7 +3,7 @@ trigger: none
 
 variables:
   - group: 'My Vars' 
-  
+
 pool:
   name: 'Self hosted pools'
   demands:
@@ -46,14 +46,23 @@ steps:
         --set controller.resources.requests.memory=100Mi \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
 
-      # B. Install Datadog Agent (Monitoring & Observability)
-      kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default || true
+      # B. Install Datadog Agent (Updated for US5 & Cluster Checks)
+      # Create/Update Secret safely
+      kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Install Agent with Orchestrator Explorer enabled
       helm upgrade --install datadog-agent datadog/datadog \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
         --set datadog.clusterName=$(CLUSTER_NAME) \
         --set datadog.tags='env:nonprod' \
-        --set datadog.resources.requests.memory=150Mi
+        --set datadog.resources.requests.memory=256Mi \
+        --set datadog.resources.limits.memory=512Mi \
+        --set datadog.clusterChecks.enabled=true \
+        --set datadog.orchestratorExplorer.enabled=true \
+        --set clusterAgent.enabled=true \
+        --set clusterAgent.replicas=1 \
+        --wait
 
       # C. Install SonarQube & Nexus (No Persistence to save RAM)
       helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
@@ -66,7 +75,7 @@ steps:
       helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.resources.requests.memory=200Mi
       helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
       
-      # E. Install External Secrets Operator (Step 7 Requirement)
+      # E. Install External Secrets Operator
       helm upgrade --install external-secrets external-secrets/external-secrets \
         --namespace external-secrets --create-namespace \
         --set installCRDs=true
@@ -98,7 +107,8 @@ steps:
       if [ ! -z "$NLB_DNS" ]; then
         echo "Updating Terraform variables with DNS: $NLB_DNS"
         cd terraform
-        # Update integration_uri in tfvars file
+        
+        # Update integration_uri in tfvars file (Robust regex)
         sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
         # Apply Terraform changes to sync API Gateway
