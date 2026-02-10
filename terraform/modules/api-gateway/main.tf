@@ -27,8 +27,7 @@ resource "aws_apigatewayv2_integration" "main" {
   
   integration_method = "ANY"
   
-  connection_type    = "VPC_LINK"
-  connection_id      = aws_apigatewayv2_vpc_link.main.id
+  connection_type    = "INTERNET"
   
   payload_format_version = "1.0"
 }
