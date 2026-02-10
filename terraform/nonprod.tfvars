@@ -20,5 +20,5 @@ tags = {
 }
 
 # 5. Authentication (Placeholders - Update with actual values)
-cognito_client_id  = "replace-with-client-id"
-cognito_issuer_url = "cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxx" 
+cognito_client_id  = "REPLACE_WITH_ACTUAL_CLIENT_ID"
+cognito_issuer_url = "cognito-idp.us-east-1.amazonaws.com/us-east-1_REPLACE_WITH_ACTUAL_USER_POOL_ID" 
