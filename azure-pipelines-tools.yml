@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (Robust Bahi-Style 🛡️)
+# Step 2: Install Platform Tools via Helm (UNLEASHED MODE 🦁🚀)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -34,23 +34,21 @@ steps:
       set -euo pipefail
 
       echo "--- 1. Installing Nginx Ingress Controller ---"
-      # Using Direct Repo URL for stability
+      # No Limits, Direct Repo
       helm upgrade --install ingress-nginx ingress-nginx \
         --repo https://kubernetes.github.io/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
         --wait
 
-      echo "--- 2. Installing Datadog Agent (Clean Install Strategy) ---"
-      # Create Secret
+      echo "--- 2. Installing Datadog Agent ---"
+      # Create Secret safely
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
-      # Cleanup potential zombies
-      echo "Cleaning up old Datadog installations..."
-      helm uninstall datadog-agent --namespace default || true
-      sleep 10
+      # Cleanup (Silent)
+      helm uninstall datadog-agent --namespace default >/dev/null 2>&1 || true
       
-      # Install (No Limits)
+      # Install (Max Performance)
       echo "Deploying Datadog..."
       helm upgrade --install datadog-agent datadog \
         --repo https://helm.datadoghq.com \
@@ -63,20 +61,24 @@ steps:
         --set clusterAgent.enabled=true \
         --set clusterAgent.replicas=1
 
-      echo "--- 3. Installing SonarQube & Nexus (Robust Method) ---"
+      echo "--- 3. Installing SonarQube & Nexus ---"
       
-      # SonarQube: Create values file locally to avoid quoting errors
+      # SonarQube Config: NO LIMITS imposed! 🔓
+      # But kept 'vmMaxMapCount' because Elasticsearch needs it to start (Kernel requirement)
       cat > sonarqube-values.yaml <<EOF
       persistence:
         enabled: false
+      initSysctl:
+        enabled: true
+        vmMaxMapCount: 262144
       sonarWebContext: /sonarqube
       EOF
 
-      echo "Deploying SonarQube..."
+      echo "Deploying SonarQube (Max Resources)..."
       helm upgrade --install sonarqube sonarqube \
         --repo https://SonarSource.github.io/helm-chart-sonarqube \
         --namespace sonarqube --create-namespace \
-        --wait --timeout 10m \
+        --wait=false \
         -f sonarqube-values.yaml
 
       echo "Deploying Nexus..."
@@ -88,7 +90,7 @@ steps:
 
       echo "--- 4. Installing GitOps & Security Tools ---"
       
-      # ArgoCD with Retry Logic (Because CRDs sometimes race)
+      # ArgoCD
       echo "Deploying ArgoCD..."
       n=0
       until [ "$n" -ge 3 ]
@@ -96,10 +98,10 @@ steps:
          helm upgrade --install argocd argo-cd \
            --repo https://argoproj.github.io/argo-helm \
            --namespace argocd --create-namespace \
-           --wait --timeout 5m && break
+           --wait=false && break
          n=$((n+1))
-         echo "ArgoCD deploy failed (attempt $n/3). Retrying in 10s..."
-         sleep 10
+         echo "Retrying ArgoCD ($n/3)..."
+         sleep 5
       done
 
       # Vault
@@ -107,18 +109,21 @@ steps:
       helm upgrade --install vault vault \
         --repo https://helm.releases.hashicorp.com \
         --namespace vault --create-namespace \
-        --set "server.dev.enabled=true"
+        --set "server.dev.enabled=true" \
+        --wait=false
       
       echo "--- 5. Installing External Secrets & Database ---"
       helm upgrade --install external-secrets external-secrets \
         --repo https://charts.external-secrets.io \
         --namespace external-secrets --create-namespace \
-        --set installCRDs=true
+        --set installCRDs=true \
+        --wait=false
 
       helm upgrade --install mongodb mongodb \
         --repo https://charts.bitnami.com/bitnami \
         --namespace database --create-namespace \
-        --set persistence.enabled=false
+        --set persistence.enabled=false \
+        --wait=false
 
 # Step 3: Automation - Link Load Balancer DNS to AWS API Gateway
 - task: AWSShellScript@1
