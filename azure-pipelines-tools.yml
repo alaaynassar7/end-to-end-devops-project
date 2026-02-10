@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (Optimized for t3.small)
+# Step 2: Install Platform Tools (Helm Charts)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -33,64 +33,141 @@ steps:
     inlineScript: |
       set -euo pipefail
 
-      # Pre-requisite: Add Helm Repositories
-      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-      helm repo add datadog https://helm.datadoghq.com
-      helm repo add external-secrets https://charts.external-secrets.io
-      helm repo add hashicorp https://helm.releases.hashicorp.com
-      helm repo update
+      # --- 1. Fix AWS CLI Path for Helm Hooks ---
+      AWS_BIN=$(which aws)
+      echo "Patching kubeconfig to use absolute AWS path: $AWS_BIN"
+      sed -i "s|command: aws|command: $AWS_BIN|g" ~/.kube/config || true
 
-      # A. Install Nginx Ingress Controller (Load Balancer Entry Point)
-      helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+      # --- 2. Auto-Tag Private Subnets for Internal Load Balancer ---
+      echo "Searching for Private Subnets to apply AWS Load Balancer tags..."
+      
+      # Retrieve Private Subnet IDs based on Name tag containing 'private'
+      PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
+        --filters "Name=tag:Name,Values=*private*" "Name=vpc-id,Values=$(aws eks describe-cluster --name $(CLUSTER_NAME) --query cluster.resourcesVpcConfig.vpcId --output text)" \
+        --query "Subnets[].SubnetId" --output text)
+
+      if [ ! -z "$PRIVATE_SUBNETS" ]; then
+        echo "Found Private Subnets: $PRIVATE_SUBNETS"
+        echo "Applying 'kubernetes.io/role/internal-elb' tag..."
+        aws ec2 create-tags --resources $PRIVATE_SUBNETS --tags Key=kubernetes.io/role/internal-elb,Value=1
+      else
+        echo "⚠️ Warning: Could not auto-detect private subnets. Ensure subnets are manually tagged."
+      fi
+
+      echo "--- 3. Installing Nginx Ingress Controller (Internal Mode) ---"
+      # Configuring as Internal NLB to support VPC Link and AWS Account Limits
+      helm upgrade --install ingress-nginx ingress-nginx \
+        --repo https://kubernetes.github.io/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
         --set controller.resources.requests.memory=100Mi \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing"
 
-      # B. Install Datadog Agent (Monitoring & Observability)
-      kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default || true
-      helm upgrade --install datadog-agent datadog/datadog \
+      echo "--- 4. Installing Datadog Agent ---"
+      kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
+      
+      # Cleanup existing installation to ensure clean state
+      helm uninstall datadog-agent --namespace default >/dev/null 2>&1 || true
+      
+      echo "Deploying Datadog Agent..."
+      helm upgrade --install datadog-agent datadog \
+        --repo https://helm.datadoghq.com \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
         --set datadog.clusterName=$(CLUSTER_NAME) \
         --set datadog.tags='env:nonprod' \
-        --set datadog.resources.requests.memory=150Mi
+        --set datadog.clusterChecks.enabled=true \
+        --set datadog.orchestratorExplorer.enabled=true \
+        --set clusterAgent.enabled=true \
+        --set clusterAgent.replicas=1
 
-      # C. Install SonarQube & Nexus (No Persistence to save RAM)
-      helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
-        --set persistence.enabled=false --set resources.requests.memory=600Mi --wait=false
+      echo "--- 5. Installing SonarQube ---"
+      cat > sonarqube-values.yaml <<EOF
+      monitoringPasscode: changeMe
+      community:
+        enabled: true
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - name: ""
+            path: "/sonarqube"
+        annotations:
+           nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+      sonarWebContext: /sonarqube
+      persistence:
+        enabled: false
+      EOF
 
-      helm upgrade --install nexus oteemo/sonatype-nexus --namespace nexus --create-namespace \
-        --set persistence.enabled=false --set nexus.resources.requests.memory=350Mi --wait=false
+      if ! helm upgrade --install sonarqube sonarqube \
+        --repo https://SonarSource.github.io/helm-chart-sonarqube \
+        --namespace sonarqube --create-namespace \
+        --wait --timeout 10m \
+        -f sonarqube-values.yaml; then
+           echo "❌ SonarQube installation failed. Fetching logs..."
+           kubectl logs -n sonarqube -l app.kubernetes.io/name=sonarqube --tail=50
+           exit 1
+      fi
 
-      # D. Install GitOps & Security Tools (ArgoCD, Vault, MongoDB)
-      helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.resources.requests.memory=200Mi
-      helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
+      echo "Deploying Nexus Repository Manager..."
+      helm upgrade --install nexus sonatype-nexus \
+        --repo https://oteemo.github.io/charts \
+        --namespace nexus --create-namespace \
+        --set persistence.enabled=false \
+        --wait=false
+
+      echo "--- 6. Installing GitOps & Security Tools ---"
+      echo "Deploying ArgoCD..."
+      n=0
+      until [ "$n" -ge 3 ]; do
+         helm upgrade --install argocd argo-cd \
+           --repo https://argoproj.github.io/argo-helm \
+           --namespace argocd --create-namespace \
+           --wait=false && break
+         n=$((n+1))
+         echo "Retrying ArgoCD installation (Attempt $n/3)..."
+         sleep 5
+      done
+
+      echo "Deploying Vault..."
+      helm upgrade --install vault vault \
+        --repo https://helm.releases.hashicorp.com \
+        --namespace vault --create-namespace \
+        --set "server.dev.enabled=true" \
+        --wait=false
       
-      # E. Install External Secrets Operator (Step 7 Requirement)
-      helm upgrade --install external-secrets external-secrets/external-secrets \
+      echo "--- 7. Installing External Secrets & Database ---"
+      helm upgrade --install external-secrets external-secrets \
+        --repo https://charts.external-secrets.io \
         --namespace external-secrets --create-namespace \
-        --set installCRDs=true
+        --set installCRDs=true \
+        --wait=false
 
-      helm upgrade --install mongodb bitnami/mongodb --namespace database --create-namespace --set persistence.enabled=false
+      helm upgrade --install mongodb mongodb \
+        --repo https://charts.bitnami.com/bitnami \
+        --namespace database --create-namespace \
+        --set persistence.enabled=false \
+        --wait=false
 
-# Step 3: Automation - Link Load Balancer DNS to AWS API Gateway
+# Step 3: Automation - Link Internal LB to API Gateway via Terraform
 - task: AWSShellScript@1
-  displayName: 'Link API Gateway to NLB'
+  displayName: 'Link API Gateway to Internal NLB'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
-      echo "Retrieving NLB DNS..."
-      sleep 60 # Wait for DNS to be provisioned by AWS
+      echo "Retrieving Internal NLB DNS Name..."
+      sleep 30 
       
       # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
       timeout=300
       end=$((SECONDS + timeout))
       while [ -z "$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
-        if [ $SECONDS -ge $end ]; then echo "Timed out waiting for NLB DNS"; exit 1; fi
-        echo "Waiting for NLB DNS..."
+        if [ $SECONDS -ge $end ]; then echo "Timeout waiting for NLB DNS"; exit 1; fi
+        echo "Waiting for Internal NLB DNS..."
         sleep 10
       done
       
@@ -102,7 +179,12 @@ steps:
         # Update integration_uri in tfvars file
         sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
         
-        # Apply Terraform changes to sync API Gateway
+        cd terraform
+        
+        # Update tfvars with new Internal LB DNS
+        sed -i "s|^\s*integration_uri.*|integration_uri = \"http://$NLB_DNS\"|g" nonprod.tfvars
+        
+        # Apply Terraform changes
         terraform init -reconfigure
         terraform apply -var-file="nonprod.tfvars" -auto-approve
         
@@ -110,9 +192,11 @@ steps:
         git config --global user.email "alaaynassar7@gmail.com"
         git config --global user.name "Alaa-Tools-Bot"
         git add nonprod.tfvars
-        git commit -m "chore: update NLB DNS in tfvars [skip ci]"
+        git commit -m "chore: update Internal NLB DNS in tfvars [skip ci]"
         git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
+        
+        echo "✅ Integration URI updated successfully!"
       else
-        echo "Error: NLB DNS could not be retrieved."
+        echo "❌ Error: Internal NLB DNS could not be retrieved."
         exit 1
       fi
