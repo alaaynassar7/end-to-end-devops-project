@@ -38,7 +38,7 @@ resource "aws_eks_node_group" "main" {
   ami_type       = "AL2023_x86_64_STANDARD" 
 
   # Using t3.small as requested (Cost Effective)
-  instance_types = ["t3.small"] 
+  instance_types = ["m7i-flex.large"] 
 
   depends_on = [
     aws_eks_cluster.main
