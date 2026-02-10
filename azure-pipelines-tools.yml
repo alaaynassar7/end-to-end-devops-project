@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (Corrected Repos ✅)
+# Step 2: Install Platform Tools via Helm (Robust Bahi-Style 🛡️)
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -33,35 +33,27 @@ steps:
     inlineScript: |
       set -euo pipefail
 
-      echo "--- 1. Adding ALL Helm Repositories ---"
-      # Load Balancer & Monitoring
-      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-      helm repo add datadog https://helm.datadoghq.com
-      
-      # Security & Secrets
-      helm repo add external-secrets https://charts.external-secrets.io
-      helm repo add hashicorp https://helm.releases.hashicorp.com
-      
-      # CI/CD & Code Quality (دول اللي كانوا ناقصين!) 👇
-      helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
-      helm repo add oteemo https://oteemo.github.io/charts  # For Nexus
-      helm repo add argo https://argoproj.github.io/argo-helm # For ArgoCD
-      helm repo add bitnami https://charts.bitnami.com/bitnami # For MongoDB
-      
-      helm repo update
-
-      echo "--- 2. Installing Nginx Ingress Controller ---"
-      helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+      echo "--- 1. Installing Nginx Ingress Controller ---"
+      # Using Direct Repo URL for stability
+      helm upgrade --install ingress-nginx ingress-nginx \
+        --repo https://kubernetes.github.io/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+        --wait
 
-      echo "--- 3. Installing Datadog Agent ---"
+      echo "--- 2. Installing Datadog Agent (Clean Install Strategy) ---"
+      # Create Secret
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
+      # Cleanup potential zombies
+      echo "Cleaning up old Datadog installations..."
       helm uninstall datadog-agent --namespace default || true
-      sleep 5
+      sleep 10
       
-      helm upgrade --install datadog-agent datadog/datadog \
+      # Install (No Limits)
+      echo "Deploying Datadog..."
+      helm upgrade --install datadog-agent datadog \
+        --repo https://helm.datadoghq.com \
         --set datadog.apiKeyExistingSecret='datadog-secret' \
         --set datadog.site='us5.datadoghq.com' \
         --set datadog.clusterName=$(CLUSTER_NAME) \
@@ -71,25 +63,62 @@ steps:
         --set clusterAgent.enabled=true \
         --set clusterAgent.replicas=1
 
-      echo "--- 4. Installing SonarQube & Nexus ---"
-      helm upgrade --install sonarqube sonarqube/sonarqube --namespace sonarqube --create-namespace \
-        --set persistence.enabled=false \
-        --wait=false
-
-      helm upgrade --install nexus oteemo/sonatype-nexus --namespace nexus --create-namespace \
-        --set persistence.enabled=false \
-        --wait=false
-
-      echo "--- 5. Installing GitOps & Security Tools ---"
-      helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace
-      helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace --set "server.dev.enabled=true"
+      echo "--- 3. Installing SonarQube & Nexus (Robust Method) ---"
       
-      echo "--- 6. Installing External Secrets & Database ---"
-      helm upgrade --install external-secrets external-secrets/external-secrets \
+      # SonarQube: Create values file locally to avoid quoting errors
+      cat > sonarqube-values.yaml <<EOF
+      persistence:
+        enabled: false
+      sonarWebContext: /sonarqube
+      EOF
+
+      echo "Deploying SonarQube..."
+      helm upgrade --install sonarqube sonarqube \
+        --repo https://SonarSource.github.io/helm-chart-sonarqube \
+        --namespace sonarqube --create-namespace \
+        --wait --timeout 10m \
+        -f sonarqube-values.yaml
+
+      echo "Deploying Nexus..."
+      helm upgrade --install nexus sonatype-nexus \
+        --repo https://oteemo.github.io/charts \
+        --namespace nexus --create-namespace \
+        --set persistence.enabled=false \
+        --wait=false
+
+      echo "--- 4. Installing GitOps & Security Tools ---"
+      
+      # ArgoCD with Retry Logic (Because CRDs sometimes race)
+      echo "Deploying ArgoCD..."
+      n=0
+      until [ "$n" -ge 3 ]
+      do
+         helm upgrade --install argocd argo-cd \
+           --repo https://argoproj.github.io/argo-helm \
+           --namespace argocd --create-namespace \
+           --wait --timeout 5m && break
+         n=$((n+1))
+         echo "ArgoCD deploy failed (attempt $n/3). Retrying in 10s..."
+         sleep 10
+      done
+
+      # Vault
+      echo "Deploying Vault..."
+      helm upgrade --install vault vault \
+        --repo https://helm.releases.hashicorp.com \
+        --namespace vault --create-namespace \
+        --set "server.dev.enabled=true"
+      
+      echo "--- 5. Installing External Secrets & Database ---"
+      helm upgrade --install external-secrets external-secrets \
+        --repo https://charts.external-secrets.io \
         --namespace external-secrets --create-namespace \
         --set installCRDs=true
 
-      helm upgrade --install mongodb bitnami/mongodb --namespace database --create-namespace --set persistence.enabled=false
+      helm upgrade --install mongodb mongodb \
+        --repo https://charts.bitnami.com/bitnami \
+        --namespace database --create-namespace \
+        --set persistence.enabled=false
 
 # Step 3: Automation - Link Load Balancer DNS to AWS API Gateway
 - task: AWSShellScript@1
