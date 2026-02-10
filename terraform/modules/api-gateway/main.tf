@@ -11,7 +11,7 @@ resource "aws_apigatewayv2_authorizer" "main" {
 
   jwt_configuration {
     audience = [var.cognito_client_id]
-    issuer   = "https://${var.cognito_issuer_url}"
+    issuer   = "https://${trimsuffix(replace(var.cognito_issuer_url, "^https://", ""), "/")}"
   }
 }
 resource "aws_apigatewayv2_vpc_link" "main" {
