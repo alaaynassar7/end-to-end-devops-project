@@ -23,7 +23,7 @@ steps:
     inlineScript: |
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools via Helm (UNLEASHED MODE 🦁🚀)
+# Step 2: Install Platform Tools 
 - task: AWSShellScript@1
   displayName: 'Install DevOps Toolchain'
   inputs:
@@ -33,8 +33,13 @@ steps:
     inlineScript: |
       set -euo pipefail
 
+      # --- Fix AWS CLI Path (Taken from Bahi's code) ---
+      # This fixes "command not found" errors during Helm hooks
+      AWS_BIN=$(which aws)
+      echo "Patching kubeconfig to use: $AWS_BIN"
+      sed -i "s|command: aws|command: $AWS_BIN|g" ~/.kube/config || true
+
       echo "--- 1. Installing Nginx Ingress Controller ---"
-      # No Limits, Direct Repo
       helm upgrade --install ingress-nginx ingress-nginx \
         --repo https://kubernetes.github.io/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
@@ -42,13 +47,11 @@ steps:
         --wait
 
       echo "--- 2. Installing Datadog Agent ---"
-      # Create Secret safely
       kubectl create secret generic datadog-secret --from-literal api-key=$(DATADOG_API_KEY) --namespace default --dry-run=client -o yaml | kubectl apply -f -
       
-      # Cleanup (Silent)
+      # Cleanup & Install
       helm uninstall datadog-agent --namespace default >/dev/null 2>&1 || true
       
-      # Install (Max Performance)
       echo "Deploying Datadog..."
       helm upgrade --install datadog-agent datadog \
         --repo https://helm.datadoghq.com \
@@ -61,25 +64,39 @@ steps:
         --set clusterAgent.enabled=true \
         --set clusterAgent.replicas=1
 
-      echo "--- 3. Installing SonarQube & Nexus ---"
+      echo "--- 3. Installing SonarQube (Bahi's Configuration) ---"
       
-      # SonarQube Config: NO LIMITS imposed! 🔓
-      # But kept 'vmMaxMapCount' because Elasticsearch needs it to start (Kernel requirement)
       cat > sonarqube-values.yaml <<EOF
+      monitoringPasscode: changeMe
+      community:
+        enabled: true
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - name: ""
+            path: "/sonarqube"
+        annotations:
+           nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+      sonarWebContext: /sonarqube
       persistence:
         enabled: false
-      initSysctl:
-        enabled: true
-        vmMaxMapCount: 262144
-      sonarWebContext: /sonarqube
       EOF
 
-      echo "Deploying SonarQube (Max Resources)..."
-      helm upgrade --install sonarqube sonarqube \
+      echo "Deploying SonarQube..."
+      if ! helm upgrade --install sonarqube sonarqube \
         --repo https://SonarSource.github.io/helm-chart-sonarqube \
         --namespace sonarqube --create-namespace \
-        --wait=false \
-        -f sonarqube-values.yaml
+        --wait --timeout 10m \
+        -f sonarqube-values.yaml; then
+           echo "❌ SonarQube installation failed! Fetching logs..."
+           kubectl get pods -n sonarqube
+           kubectl describe pods -n sonarqube
+           kubectl logs -n sonarqube -l app.kubernetes.io/name=sonarqube --tail=50
+           exit 1
+      fi
 
       echo "Deploying Nexus..."
       helm upgrade --install nexus sonatype-nexus \
@@ -90,7 +107,6 @@ steps:
 
       echo "--- 4. Installing GitOps & Security Tools ---"
       
-      # ArgoCD
       echo "Deploying ArgoCD..."
       n=0
       until [ "$n" -ge 3 ]
@@ -104,7 +120,6 @@ steps:
          sleep 5
       done
 
-      # Vault
       echo "Deploying Vault..."
       helm upgrade --install vault vault \
         --repo https://helm.releases.hashicorp.com \
