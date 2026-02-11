@@ -114,7 +114,7 @@ steps:
         --set controller.admissionWebhooks.enabled=false \
         --wait --timeout 15m
 
-# 5. Install Datadog (US5 Region & Full Features)
+# 5. Install Datadog (Fixed Cluster Name)
 - task: AWSShellScript@1
   displayName: 'Install Datadog (US5)'
   inputs:
@@ -125,32 +125,37 @@ steps:
       set -e
       echo "Starting Datadog Setup for US5..."
       
-      # 1. Cleanup old installations and conflicts
+      # 1. Sanitize Cluster Name (Fix for the error)
+      RAW_NAME="$(CLUSTER_NAME)"
+      VALID_CLUSTER_NAME=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]')
+      echo "Original Name: $RAW_NAME -> Validated Name: $VALID_CLUSTER_NAME"
+
+      # 2. Cleanup
       helm uninstall datadog-agent -n alaa || true
       helm uninstall datadog -n datadog || true
       
-      # Delete CRDs to resolve ownership errors
       kubectl delete crd datadogagents.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogmetrics.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogmonitors.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogslos.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogdashboards.datadoghq.com --ignore-not-found=true
 
-      # 2. Add Helm Repo
+      # 3. Add Repo
       helm repo add datadog https://helm.datadoghq.com
       helm repo update
 
-      # 3. Install with US5 Config
-      echo "Deploying Datadog Agent to US5 Site..."
+      # 4. Install using VALID_CLUSTER_NAME
+      echo "Deploying Datadog Agent..."
       
       helm upgrade --install datadog datadog/datadog \
         --namespace datadog --create-namespace \
         --set datadog.apiKey=$(DATADOG_API_KEY) \
         --set datadog.site="us5.datadoghq.com" \
-        --set datadog.clusterName="$(CLUSTER_NAME)" \
+        --set datadog.clusterName="$VALID_CLUSTER_NAME" \
         --set datadog.kubelet.tlsVerify=false \
         --set clusterChecks.enabled=true \
         --set datadog.orchestratorExplorer.enabled=true \
+        --wait --timeout 10m
         --wait --timeout 10m
 
 # 6. Install OAuth2-Proxy
