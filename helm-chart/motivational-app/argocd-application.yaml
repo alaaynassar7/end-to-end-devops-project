@@ -27,7 +27,6 @@ jobs:
       scriptType: inline
       inlineScript: |
         set -euo pipefail
-        
         echo "Connecting to cluster: $(CLUSTER_NAME)..."
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
         
@@ -81,7 +80,7 @@ jobs:
         
         printf "ingress:\n  annotations:\n    nginx.ingress.kubernetes.io/auth-signin: \"$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri\"\n" > dynamic-values.yaml
 
-        helm upgrade --install motivational-app ./helm-chart/motivational-app \
+        helm upgrade --install motivational-app ./helm-charts/motivational-app \
           --namespace alaa \
           --set image.tag="latest" \
           -f dynamic-values.yaml \
