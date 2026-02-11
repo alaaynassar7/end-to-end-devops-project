@@ -114,7 +114,7 @@ steps:
         --set controller.admissionWebhooks.enabled=false \
         --wait --timeout 15m
 
-# 6. Install OAuth2-Proxy (Sanitized)
+# 6. Install OAuth2-Proxy (Sanitized & Fixed)
 - task: AWSShellScript@1
   displayName: 'Install OAuth2-Proxy'
   inputs:
@@ -130,6 +130,7 @@ steps:
       CLEAN_CLIENT_SECRET=$(echo -n "$(COGNITO_CLIENT_SECRET)" | tr -d '\n' | tr -d '\r')
       CLEAN_COOKIE_SECRET=$(echo -n "$(COOKIE_SECRET)" | tr -d '\n' | tr -d '\r')
       CLEAN_ISSUER_URL=$(echo -n "$(COGNITO_ISSUER_URL)" | tr -d '\n' | tr -d '\r')
+      # APIGW_URL cleaning
       CLEAN_APIGW_URL=$(echo -n "$(APIGW_URL)" | tr -d '\n' | tr -d '\r')
 
       helm uninstall oauth2-proxy -n ingress-nginx || true
