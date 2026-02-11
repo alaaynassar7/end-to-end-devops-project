@@ -26,7 +26,7 @@ jobs:
       repository: $(IMAGE_REPOSITORY)
       command: 'buildAndPush'
       Dockerfile: 'motivational-app/dockerfile' 
-      buildContext: '.' 
+      buildContext: 'motivational-app' 
       tags: |
         $(Build.BuildId)
         latest
