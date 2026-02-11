@@ -6,7 +6,6 @@ locals {
   }
 }
 
-# 1. تعريف الـ Role الخاص بالكلاستر
 resource "aws_iam_role" "eks_cluster" {
   name = "${var.project_name}-cluster-role"
   assume_role_policy = jsonencode({
@@ -26,7 +25,6 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role        = aws_iam_role.eks_cluster.name
 }
 
-# 2. إنشاء الـ EKS Cluster
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
   role_arn = aws_iam_role.eks_cluster.arn
