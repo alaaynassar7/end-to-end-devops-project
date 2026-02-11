@@ -27,14 +27,13 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  port: 80
-  targetPort: 5000  # Default Flask port
+  port: 5000        
+  targetPort: 5000  
 
 ingress:
-  enabled: true
+  enabled: true 
   className: "nginx"
   annotations:
-    # This will be overwritten by the pipeline dynamically, but we keep it as a placeholder
     nginx.ingress.kubernetes.io/auth-signin: "placeholder"
   hosts:
     - host: 
@@ -53,12 +52,3 @@ resources:
 
 autoscaling:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-
-volumes: []
-volumeMounts: []
-nodeSelector: {}
-tolerations: []
-affinity: {}
