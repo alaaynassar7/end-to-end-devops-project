@@ -1,4 +1,4 @@
-name: $(Date:yyyyMMdd)$(Rev:.r)-Addons
+name: $(Date:yyyyMMdd)$(Rev:.r)-tools
 trigger: none
 pr: none
 
