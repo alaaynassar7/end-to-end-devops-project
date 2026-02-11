@@ -31,7 +31,7 @@ steps:
   inputs:
     terraformVersion: latest
 
-# 2. Update Kubeconfig
+# 2. Update Kubeconfig (Simplified)
 - task: AWSShellScript@1
   displayName: 'Update Kubeconfig'
   inputs:
@@ -39,7 +39,16 @@ steps:
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
-      set -euo pipefail
+      set -e
+      
+      echo "Checking AWS CLI version..."
+      aws --version
+      
+      echo "Updating Kubeconfig for cluster: $(CLUSTER_NAME)..."
+      aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
+      
+      echo "Verifying connection..."
+      kubectl get svc
       
       # Install AWS CLI
       if ! command -v aws &> /dev/null; then
