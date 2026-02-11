@@ -61,14 +61,12 @@ jobs:
       inlineScript: |
         set -euo pipefail
         
-        # Ensure we are in the root directory to find helm-chart correctly
         cd $(Build.SourcesDirectory)
         
-        # Verify the path exists before running Helm
-        if [ ! -d "./helm-chart/motivational-app" ]; then
-          echo "##[error] Directory ./helm-chart/motivational-app NOT found!"
-          find . -maxdepth 3 -type d
-          exit 1
+        CHART_PATH=$(find . -name "motivational-app" -type d -path "*/helm-chart/*" | head -n 1)
+        
+        if [ -z "$CHART_PATH" ]; then
+          CHART_PATH="./helm-chart/motivational-app"
         fi
 
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
@@ -80,19 +78,17 @@ jobs:
           --docker-password="$(DOCKER_PASSWORD)" \
           --docker-email=alaaynassar7@gmail.com 
         
-        # Create dynamic values using a robust method
         cat <<EOF > dynamic-values.yaml
         ingress:
           annotations:
             nginx.ingress.kubernetes.io/auth-signin: "$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri"
         EOF
 
-        # Run Helm upgrade using the exact path from your VS Code structure
-        helm upgrade --install motivational-app ./helm-chart/motivational-app \
+        helm upgrade --install motivational-app "$CHART_PATH" \
           --namespace alaa \
           --set image.tag="latest" \
           -f dynamic-values.yaml \
-          --wait --timeout 5m
+          --wait --timeout 5m --force --debug
 
         kubectl rollout restart deployment -n alaa -l app.kubernetes.io/instance=motivational-app
     env:
