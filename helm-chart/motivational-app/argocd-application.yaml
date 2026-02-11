@@ -3,7 +3,7 @@ trigger: none
 pr: none
 
 variables:
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
+  AWS_SERVICE_CONNECTION: 'aws-alaa-2' 
   AWS_REGION: 'eu-north-1' 
   CLUSTER_NAME: 'alaa-devops-project-cluster'
   API_GATEWAY_NAME: 'alaa-devops-project-api'
@@ -27,12 +27,18 @@ jobs:
       scriptType: inline
       inlineScript: |
         set -euo pipefail
+        
+        echo "Connecting to cluster: $(CLUSTER_NAME)..."
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
         
         APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
+        
         if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
+           echo "##[warning] API Gateway not found by name, trying to get the first one available..."
            APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text)
         fi
+
+        echo "Found API Gateway: $APIGW_URL"
         echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
 
   - task: Docker@2
@@ -50,8 +56,10 @@ jobs:
         CONFIG_FILE="$DOCKER_CONFIG/config.json"
         AUTH_STRING=$(python3 -c "import json; data = json.load(open('$CONFIG_FILE')); print(list(data['auths'].values())[0]['auth'])")
         DECODED_AUTH=$(echo "$AUTH_STRING" | base64 -d)
-        echo "##vso[task.setvariable variable=DOCKER_USERNAME]$(echo "$DECODED_AUTH" | cut -d: -f1)"
-        echo "##vso[task.setvariable variable=DOCKER_PASSWORD;isSecret=true]$(echo "$DECODED_AUTH" | cut -d: -f2-)"
+        DOCKER_USERNAME=$(echo "$DECODED_AUTH" | cut -d: -f1)
+        DOCKER_PASSWORD=$(echo "$DECODED_AUTH" | cut -d: -f2-)
+        echo "##vso[task.setvariable variable=DOCKER_USERNAME]$DOCKER_USERNAME"
+        echo "##vso[task.setvariable variable=DOCKER_PASSWORD;isSecret=true]$DOCKER_PASSWORD"
 
   - task: AWSShellScript@1
     displayName: Deploy Motivational App (Helm)
@@ -62,6 +70,17 @@ jobs:
       inlineScript: |
         set -euo pipefail
         
+        cd $(Build.SourcesDirectory)
+        echo "Current Directory: $(pwd)"
+        
+        CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
+        
+        if [ -z "$CHART_PATH" ]; then
+          echo "
+          exit 1
+        fi
+        echo "Found Chart at: $CHART_PATH"
+
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
         kubectl create secret docker-registry regcred \
@@ -70,15 +89,7 @@ jobs:
           --docker-username="$(DOCKER_USERNAME)" \
           --docker-password="$(DOCKER_PASSWORD)" \
           --docker-email=alaaynassar7@gmail.com 
-
-        CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
         
-        if [ -z "$CHART_PATH" ]; then
-          echo 
-          exit 1
-        fi
-        echo "Found Chart at: $CHART_PATH"
-
         printf "ingress:\n  annotations:\n    nginx.ingress.kubernetes.io/auth-signin: \"$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri\"\n" > dynamic-values.yaml
 
         helm upgrade --install motivational-app "$CHART_PATH" \
