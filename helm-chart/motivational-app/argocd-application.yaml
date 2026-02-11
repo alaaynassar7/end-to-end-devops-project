@@ -28,7 +28,11 @@ jobs:
       inlineScript: |
         set -euo pipefail
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
+        
         APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
+        if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
+           APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text)
+        fi
         echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
 
   - task: Docker@2
@@ -58,16 +62,26 @@ jobs:
       inlineScript: |
         set -euo pipefail
         
-        echo "Checking directory structure..."
-        ls -R
-        
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
-        kubectl create secret docker-registry regcred --namespace alaa --docker-server=https://index.docker.io/v1/ --docker-username="$(DOCKER_USERNAME)" --docker-password="$(DOCKER_PASSWORD)" --docker-email=alaaynassar7@gmail.com 
+        kubectl create secret docker-registry regcred \
+          --namespace alaa \
+          --docker-server=https://index.docker.io/v1/ \
+          --docker-username="$(DOCKER_USERNAME)" \
+          --docker-password="$(DOCKER_PASSWORD)" \
+          --docker-email=alaaynassar7@gmail.com 
+
+        CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
         
+        if [ -z "$CHART_PATH" ]; then
+          echo 
+          exit 1
+        fi
+        echo "Found Chart at: $CHART_PATH"
+
         printf "ingress:\n  annotations:\n    nginx.ingress.kubernetes.io/auth-signin: \"$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri\"\n" > dynamic-values.yaml
 
-        helm upgrade --install motivational-app ./helm-chart/motivational-app \
+        helm upgrade --install motivational-app "$CHART_PATH" \
           --namespace alaa \
           --set image.tag="latest" \
           -f dynamic-values.yaml \
