@@ -1,124 +1,264 @@
-name: $(Date:yyyyMMdd)$(Rev:.r)-tools
+name: $(Date:yyyyMMdd)$(Rev:.r)-Final-DevOps-Tools
 trigger: none
 pr: none
 
-parameters:
-  - name: env
-    displayName: Environment
-    type: string
-    default: nonprod
-    values: [nonprod, prod]
-
 variables:
-  - group: 'My Vars' 
-  - name: TF_DIR
-    value: 'terraform' 
-  - name: TF_VAR_FILE
-    value: '${{ parameters.env }}.tfvars'
-  - name: AWS_SERVICE_CONNECTION
-    value: 'aws-alaa-2'
-  - name: AWS_REGION
-    value: 'eu-north-1'
-  - name: CLUSTER_NAME
-    value: 'alaa-devops-project-cluster'
-
+  # --- User Constants ---
+  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
+  AWS_REGION: 'eu-north-1'
+  CLUSTER_NAME: 'alaa-devops-project-cluster'
+  TF_BUCKET_NAME: 'alaa-devops-project-tf-state-v2'
+  TF_STATE_KEY: 'infra/nonprod/terraform.tfstate'
+  TF_DIR: '.'  
+  
 pool:
   name: 'Self hosted pools'
   demands:
-   - Agent.Name -equals alaaynassar-VMware
+    - Agent.Name -equals alaaynassar-VMware
 
-jobs:
-- job: Addons
-  displayName: 'Deploy DevOps Stack & DataDog'
-  timeoutInMinutes: 160
-  steps:
-  - checkout: self
+steps:
+- checkout: self
+  persistCredentials: true
 
-  - task: TerraformInstaller@1
-    inputs: { terraformVersion: latest }
+# 1. Install Basics
+- task: TerraformInstaller@1
+  displayName: Install Terraform
+  inputs:
+    terraformVersion: latest
 
-  # 1. Init & Kubeconfig 
-  - task: AWSShellScript@1
-    displayName: 'Terraform Init & Kubeconfig'
-    inputs:
-      awsCredentials: $(AWS_SERVICE_CONNECTION)
-      regionName: $(AWS_REGION)
-      scriptType: inline
-      inlineScript: |
-        cd "$(TF_DIR)"
-        terraform init
-        aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
+- task: HelmInstaller@1
+  displayName: Install Helm
+  inputs:
+    helmVersionToInstall: 'latest'
 
-  - task: HelmInstaller@1
-    inputs: { helmVersionToInstall: 'latest' }
+# 2. Configure AWS & Kubeconfig
+- task: AWSShellScript@1
+  displayName: 'Configure Cloud Access'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -e
+      
+      # Install AWS CLI if missing
+      if ! command -v aws &> /dev/null; then
+          echo "Installing AWS CLI..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install || ./aws/install -i ~/aws-cli -b ~/bin
+          echo "##vso[task.prependpath]$HOME/bin"
+      fi
 
-  # 2. Install Nginx & Link API Gateway 
-  - task: AWSShellScript@1
-    displayName: 'Install Nginx & Link APIGW'
-    inputs:
-      awsCredentials: $(AWS_SERVICE_CONNECTION)
-      regionName: $(AWS_REGION)
-      scriptType: inline
-      inlineScript: |
-        echo "Installing Nginx Ingress..."
-        helm upgrade --install ingress-nginx ingress-nginx \
-          --repo https://kubernetes.github.io/ingress-nginx \
-          --namespace ingress-nginx --create-namespace \
-          --set controller.service.type=LoadBalancer \
-          --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-          --wait --timeout 15m
+      echo "Updating Kubeconfig for cluster: $(CLUSTER_NAME)..."
+      aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
+      
+      # Verify
+      kubectl get svc
 
-        cd "$(TF_DIR)"
-        NLB_DNS=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-        NLB_NAME=$(echo $NLB_DNS | cut -d'-' -f1)
-        LB_ARN=$(aws elbv2 describe-load-balancers --names "$NLB_NAME" --query 'LoadBalancers[0].LoadBalancerArn' --output text)
-        LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn "$LB_ARN" --query 'Listeners[0].ListenerArn' --output text)
-        
-        echo "Linking API Gateway to NLB DNS: $NLB_DNS"
-        terraform apply -auto-approve -var-file="$(TF_VAR_FILE)" \
-          -var="nlb_dns_name=http://$NLB_DNS" \
-          -var="nlb_listener_arn=$LISTENER_ARN"
+# 3. Export Terraform Outputs (Critical for Modules)
+- task: AWSShellScript@1
+  displayName: 'Export Infrastructure Outputs'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -e
+      cd $(TF_DIR)
+      
+      # Initialize just to read outputs
+      terraform init \
+         -backend-config="bucket=$(TF_BUCKET_NAME)" \
+         -backend-config="key=$(TF_STATE_KEY)" \
+         -backend-config="region=$(AWS_REGION)" \
+         -reconfigure
 
-  # 3. Install DevOps Tools (Argo, Sonar, Vault)
-  - task: AWSShellScript@1
-    displayName: 'Deploy Tools (Argo, Sonar, Vault)'
-    inputs:
-      awsCredentials: $(AWS_SERVICE_CONNECTION)
-      regionName: $(AWS_REGION)
-      scriptType: inline
-      inlineScript: |
-        # ArgoCD
-        helm upgrade --install argocd argo-cd \
-          --repo https://argoproj.github.io/argo-helm \
-          --namespace alaa --create-namespace \
-          --set server.extraArgs={--insecure,--rootpath=/argocd}
+      echo "Reading Outputs..."
+      COGNITO_CLIENT_ID=$(terraform output -raw cognito_client_id)
+      COGNITO_CLIENT_SECRET=$(terraform output -raw cognito_client_secret)
+      COGNITO_ISSUER_URL=$(terraform output -raw cognito_issuer_url)
+      APIGW_URL=$(terraform output -raw api_gateway_url)
 
-        # SonarQube
-        helm upgrade --install sonarqube sonarqube \
-          --repo https://SonarSource.github.io/helm-chart-sonarqube \
-          --namespace alaa --create-namespace \
-          --set sonarWebContext=/sonarqube
+      echo "##vso[task.setvariable variable=COGNITO_CLIENT_ID;isSecret=true]$COGNITO_CLIENT_ID"
+      echo "##vso[task.setvariable variable=COGNITO_CLIENT_SECRET;isSecret=true]$COGNITO_CLIENT_SECRET"
+      echo "##vso[task.setvariable variable=COGNITO_ISSUER_URL]$COGNITO_ISSUER_URL"
+      echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
 
-        # Vault
-        helm upgrade --install vault vault \
-          --repo https://helm.releases.hashicorp.com \
-          --namespace alaa --create-namespace
+      # Cookie Secret for OAuth
+      echo "##vso[task.setvariable variable=COOKIE_SECRET;isSecret=true]STABLE_SECRET_V1_FOR_32_BYTE_AES"
 
-  # 4. Install DataDog 
-  - task: AWSShellScript@1
-    displayName: 'Install DataDog Monitoring'
-    inputs:
-      awsCredentials: $(AWS_SERVICE_CONNECTION)
-      regionName: $(AWS_REGION)
-      scriptType: inline
-      inlineScript: |
-        echo "Installing DataDog..."
-        helm repo add datadog https://helm.datadoghq.com
-        helm repo update
-        helm upgrade --install datadog-agent datadog/datadog \
-          --namespace alaa --create-namespace \
-          --set datadog.apiKey=$(DATADOG_API_KEY) \
-          --set datadog.clusterName=$(CLUSTER_NAME) \
-          --set datadog.site='datadoghq.com' \
-          --set datadog.logs.enabled=true \
-          --set datadog.logs.containerCollectAll=true
+# 4. Install Nginx Ingress 
+- task: AWSShellScript@1
+  displayName: 'Install Nginx Ingress (NLB)'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -euo pipefail
+      
+      echo "Installing Nginx Ingress Controller..."
+      helm upgrade --install ingress-nginx ingress-nginx \
+        --repo https://kubernetes.github.io/ingress-nginx \
+        --namespace ingress-nginx --create-namespace \
+        --version 4.11.3 \
+        --set controller.service.type=LoadBalancer \
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
+        --set controller.admissionWebhooks.enabled=false \
+        --wait --timeout 15m
+
+# 5. Install Datadog (The Requested Addition)
+- task: AWSShellScript@1
+  displayName: 'Install Datadog'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -e
+      echo "Installing Datadog..."
+      
+      # Add Repo
+      helm repo add datadog https://helm.datadoghq.com
+      helm repo update
+
+      # Install with minimal config
+      # IMPORTANT: Make sure DATADOG_API_KEY is in your Variable Group
+      helm upgrade --install datadog datadog/datadog \
+        --namespace datadog --create-namespace \
+        --set datadog.apiKey=$(DATADOG_API_KEY) \
+        --set datadog.site="datadoghq.eu" \
+        --set datadog.kubelet.tlsVerify=false \
+        --wait --timeout 10m
+
+# 6. Install OAuth2-Proxy (Cognito Link)
+- task: AWSShellScript@1
+  displayName: 'Install OAuth2-Proxy'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -euo pipefail
+      
+      echo "Deploying OAuth2 Proxy..."
+      # Clean stuck releases
+      helm uninstall oauth2-proxy -n ingress-nginx || true
+
+      helm upgrade --install oauth2-proxy oauth2-proxy \
+        --repo https://oauth2-proxy.github.io/manifests \
+        --namespace ingress-nginx \
+        --wait --atomic \
+        --set config.clientID="$(COGNITO_CLIENT_ID)" \
+        --set config.clientSecret="$(COGNITO_CLIENT_SECRET)" \
+        --set config.cookieSecret="$(COOKIE_SECRET)" \
+        --set extraArgs.provider="oidc" \
+        --set extraArgs.oidc-issuer-url="$(COGNITO_ISSUER_URL)" \
+        --set extraArgs.email-domain="gmail.com" \
+        --set extraArgs.redirect-url="$(APIGW_URL)/oauth2/callback" \
+        --set ingress.enabled=true \
+        --set ingress.className="nginx" \
+        --set ingress.path="/oauth2" \
+        --set ingress.hosts[0]=""
+
+# 7. Install Tools (Vault, Argo, Sonar)
+- task: AWSShellScript@1
+  displayName: 'Install DevOps Tools (Vault, Argo, Sonar)'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -euo pipefail
+      
+      # Using namespace 'alaa-tools' to keep things organized
+      NS="alaa-tools"
+      kubectl create namespace $NS --dry-run=client -o yaml | kubectl apply -f -
+
+      # --- Vault ---
+      echo "Installing Vault..."
+      kubectl delete MutatingWebhookConfiguration vault-agent-injector-cfg --ignore-not-found=true
+      
+      helm upgrade --install vault vault \
+        --repo https://helm.releases.hashicorp.com \
+        --namespace $NS \
+        --set "server.dev.enabled=true" \
+        --set "ui.enabled=true" \
+        --set "ui.service.type=ClusterIP" \
+        --set "server.ingress.enabled=true" \
+        --set "server.ingress.ingressClassName=nginx" \
+        --set "server.ingress.hosts[0].host=" \
+        --set "server.ingress.hosts[0].paths[0]=/vault"
+
+      # --- ArgoCD ---
+      echo "Installing ArgoCD..."
+      helm upgrade --install argocd argo-cd \
+        --repo https://argoproj.github.io/argo-helm \
+        --namespace $NS \
+        --set server.service.type=ClusterIP \
+        --set server.ingress.enabled=true \
+        --set server.ingress.ingressClassName=nginx \
+        --set server.ingress.extraArgs={--insecure,--rootpath=/argocd} \
+        --set server.ingress.paths[0]=/argocd
+
+      # --- SonarQube ---
+      echo "Installing SonarQube..."
+      helm upgrade --install sonarqube sonarqube \
+        --repo https://SonarSource.github.io/helm-chart-sonarqube \
+        --namespace $NS \
+        --set community.enabled=true \
+        --set ingress.enabled=true \
+        --set ingress.ingressClassName=nginx \
+        --set ingress.hosts[0].name="" \
+        --set ingress.hosts[0].path="/sonarqube" \
+        --set sonarWebContext=/sonarqube \
+        --wait --timeout 10m
+
+# 8. Update Terraform with Load Balancer DNS (Final Link)
+- task: AWSShellScript@1
+  displayName: 'Link Load Balancer to Terraform'
+  inputs:
+    awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+    regionName: '$(AWS_REGION)'
+    scriptType: 'inline'
+    inlineScript: |
+      set -e
+      cd $(TF_DIR)
+
+      echo "Fetching NLB DNS..."
+      # Loop to wait for LB
+      timeout=300
+      end=$((SECONDS + timeout))
+      while true; do
+        LB_DNS=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "")
+        if [ -n "$LB_DNS" ]; then
+            echo "Found NLB: $LB_DNS"
+            break
+        fi
+        if [ $SECONDS -ge $end ]; then echo "Timeout waiting for LB"; exit 1; fi
+        sleep 10
+      done
+
+      echo "Updating nonprod.tfvars..."
+      NEW_URI="http://$LB_DNS"
+      
+      # Update the file safely
+      if grep -q "integration_uri" nonprod.tfvars; then
+        sed -i "s|integration_uri.*|integration_uri = \"$NEW_URI\"|g" nonprod.tfvars
+      else
+        echo "integration_uri = \"$NEW_URI\"" >> nonprod.tfvars
+      fi
+
+      echo "Applying Terraform Update..."
+      terraform apply -var-file="nonprod.tfvars" -auto-approve
+
+      # GitOps Push
+      # GitOps Push
+      git config --global user.email "alaaynassar7@gmail.com"
+      git config --global user.name "Alaa Nassar"
+      
+      git add nonprod.tfvars
+      git commit -m "chore: update integration_uri with new NLB [skip ci]" || echo "No changes"
+      
+      git push origin HEAD:$(Build.SourceBranchName)
