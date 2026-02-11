@@ -4,13 +4,12 @@ trigger: none
 variables:
   - group: 'My Vars' 
   
-  # 🔄 UPDATED: Configuration for New Account & Region
+  # Project Variables
   - name: AWS_SERVICE_CONNECTION
     value: 'aws-alaa-2'
   - name: AWS_REGION
     value: 'eu-north-1'
     
-  # 🔄 UPDATED: Correct Resource Names
   - name: CLUSTER_NAME
     value: 'alaa-devops-project-cluster'
   - name: TF_BUCKET_NAME
@@ -27,7 +26,13 @@ steps:
 - checkout: self
   persistCredentials: true
 
-# Step 1: Connect to EKS Cluster
+# 1. Install Terraform
+- task: TerraformInstaller@1
+  displayName: Install Terraform
+  inputs:
+    terraformVersion: latest
+
+# 2. Update Kubeconfig
 - task: AWSShellScript@1
   displayName: 'Update Kubeconfig'
   inputs:
@@ -35,11 +40,28 @@ steps:
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
+      set -euo pipefail
+      
+      # Install AWS CLI if missing
+      if ! command -v aws &> /dev/null; then
+          echo "Installing AWS CLI..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install || ./aws/install -i ~/aws-cli -b ~/bin
+          echo "##vso[task.prependpath]$HOME/bin"
+      fi
+
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
 
-# Step 2: Install Platform Tools (Helm Charts)
+# 3. Install Helm
+- task: HelmInstaller@1
+  displayName: Install Helm
+  inputs:
+    helmVersionToInstall: 'latest'
+
+# 4. Install Nginx Ingress (Internal NLB Mode)
 - task: AWSShellScript@1
-  displayName: 'Install DevOps Toolchain'
+  displayName: 'Install Nginx Ingress'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
@@ -47,122 +69,105 @@ steps:
     inlineScript: |
       set -euo pipefail
 
-      # --- 1. Fix AWS CLI Path for Helm Hooks ---
+      # Error handling
+      handle_error() {
+        echo "##[error] Nginx Ingress deployment failed!"
+        kubectl get all -n ingress-nginx
+        kubectl describe pod -l app.kubernetes.io/name=ingress-nginx -n ingress-nginx || true
+        kubectl get events -n ingress-nginx --sort-by='.lastTimestamp' || true
+      }
+      trap 'handle_error' ERR
+
+      # Fix AWS CLI path in Kubeconfig
       AWS_BIN=$(which aws)
-      echo "Patching kubeconfig to use absolute AWS path: $AWS_BIN"
       sed -i "s|command: aws|command: $AWS_BIN|g" ~/.kube/config || true
 
-      # --- 2. Auto-Tag Private Subnets for Internal Load Balancer ---
-      echo "Searching for Private Subnets to apply AWS Load Balancer tags..."
-      
-      # Retrieve Private Subnet IDs based on Name tag containing 'private'
+      echo "--- Auto-Tagging Private Subnets (Required for Internal NLB) ---"
+      # Retrieve Private Subnet IDs
       PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
         --filters "Name=tag:Name,Values=*private*" "Name=vpc-id,Values=$(aws eks describe-cluster --name $(CLUSTER_NAME) --query cluster.resourcesVpcConfig.vpcId --output text)" \
         --query "Subnets[].SubnetId" --output text)
-
+      
       if [ ! -z "$PRIVATE_SUBNETS" ]; then
-        echo "Found Private Subnets: $PRIVATE_SUBNETS"
-        echo "Applying 'kubernetes.io/role/internal-elb' tag..."
+        echo "Tagging Subnets: $PRIVATE_SUBNETS"
         aws ec2 create-tags --resources $PRIVATE_SUBNETS --tags Key=kubernetes.io/role/internal-elb,Value=1
       else
-        echo "⚠️ Warning: Could not auto-detect private subnets. Ensure subnets are manually tagged."
+        echo "##[warning] No private subnets found to tag!"
       fi
 
-      echo "--- 3. Installing Nginx Ingress Controller (Internal Mode) ---"
-      # 🔄 UPDATED: Configuring as Internal NLB for Zero-Trust
+      echo "Installing Nginx Ingress Controller..."
+      # ⚠️ CRITICAL: Added 'internal' annotation for Zero-Trust
       helm upgrade --install ingress-nginx ingress-nginx \
         --repo https://kubernetes.github.io/ingress-nginx \
         --namespace ingress-nginx --create-namespace \
-        --set controller.resources.requests.memory=100Mi \
+        --version 4.11.3 \
+        --set controller.service.type=LoadBalancer \
         --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-internal"="true" \
-        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internal"
+        --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internal" \
+        --set controller.admissionWebhooks.enabled=false \
+        --wait \
+        --timeout 15m \
+        --debug
 
-      # --- 4. Installing Other Tools (Datadog, SonarQube, etc.) ---
-      # (Existing Logic kept as is)
-      
-      echo "--- 6. Installing ArgoCD ---"
-      n=0
-      until [ "$n" -ge 3 ]; do
-         helm upgrade --install argocd argo-cd \
-           --repo https://argoproj.github.io/argo-helm \
-           --namespace argocd --create-namespace \
-           --wait=false && break
-         n=$((n+1))
-         echo "Retrying ArgoCD installation (Attempt $n/3)..."
-         sleep 5
-      done
-
-# Step 3: Automation - Link Internal NLB to API Gateway via Terraform
-# 🔄 REPLACED: NodePort Logic removed -> Added NLB ARN Fetching Logic
+# 5. Fetch NLB DNS & Update Terraform
 - task: AWSShellScript@1
-  displayName: 'Fetch NLB ARN and Update tfvars'
+  displayName: 'Link API Gateway to Load Balancer'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
-      set -e
+      set -euo pipefail
+      cd terraform
 
-      echo "--- 1. Fetching Internal NLB Details ---"
+      echo "Fetching Load Balancer DNS..."
       
-      # Wait loop for LoadBalancer Hostname (Timeout: 5 minutes)
+      # Wait loop (Robustness: NLB DNS takes time to appear)
       timeout=300
       end=$((SECONDS + timeout))
-      
-      # Check if Ingress exists first
-      while [ -z "$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
-        if [ $SECONDS -ge $end ]; then echo "Timeout waiting for NLB DNS"; exit 1; fi
+      while [ -z "$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
+        if [ $SECONDS -ge $end ]; then echo "##[error]Timeout waiting for NLB DNS"; exit 1; fi
         echo "Waiting for Internal NLB DNS..."
         sleep 10
       done
-      
-      NLB_DNS=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-      
-      if [ ! -z "$NLB_DNS" ]; then
-        echo "Found NLB DNS: $NLB_DNS"
-        echo "Fetching NLB Listener ARN from AWS..."
-        
-        # 1. Get Load Balancer ARN using the DNS Name
-        LB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$NLB_DNS'].LoadBalancerArn" --output text)
-        
-        if [ -z "$LB_ARN" ]; then echo "❌ Error: Could not find Load Balancer ARN"; exit 1; fi
-        
-        # 2. Get Listener ARN (Targeting Port 80 for HTTP)
-        LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $LB_ARN --query "Listeners[?Port==\`80\`].ListenerArn" --output text)
-        
-        if [ -z "$LISTENER_ARN" ]; then echo "❌ Error: Could not find Listener ARN on port 80"; exit 1; fi
-        
-        echo "Updating Terraform variables with Listener ARN: $LISTENER_ARN"
-        cd terraform
-        
-        # Update nlb_listener_arn in tfvars file with the ARN
-        sed -i "s|^\s*nlb_listener_arn.*|nlb_listener_arn = \"$LISTENER_ARN\"|g" nonprod.tfvars
-        
-        echo "--- 2. Applying Terraform Changes ---"
-        # Initialize Terraform with explicit Backend Config
-        terraform init \
-           -backend-config="bucket=$(TF_BUCKET_NAME)" \
-           -backend-config="key=$(TF_STATE_KEY)" \
-           -backend-config="region=$(AWS_REGION)" \
-           -reconfigure
 
-        # Apply Terraform changes to link API Gateway to NLB
-        terraform apply -var-file="nonprod.tfvars" -auto-approve
-        
-        echo "--- 3. GitOps: Syncing Changes to Repository ---"
-        git config --global user.email "alaaynassar7@gmail.com"
-        git config --global user.name "Alaa Nassar"
-        
-        git add nonprod.tfvars
-        
-        # Commit and Push
-        git commit -m "chore: update Internal NLB ARN in tfvars [skip ci]" || echo "No changes to commit"
-        
-        git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
-        
-        echo "✅ Integration URI updated successfully!"
-      else
-        echo "❌ Error: Internal NLB DNS could not be retrieved."
-        exit 1
+      NLB_DNS=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+      echo "Found LB: $NLB_DNS"
+      
+      echo "Fetching LB ARN..."
+      # Robust query using DNS Name
+      LB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$NLB_DNS'].LoadBalancerArn" --output text)
+      
+      if [ -z "$LB_ARN" ]; then
+         echo "##[error] Could not find Load Balancer ARN for DNS: $NLB_DNS"
+         exit 1
       fi
+
+      echo "Fetching Listener ARN..."
+      LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn "$LB_ARN" --query "Listeners[?Port==\`80\`].ListenerArn" --output text)
+      
+      if [ -z "$LISTENER_ARN" ]; then
+         echo "##[error] Could not find Listener ARN on port 80"
+         exit 1
+      fi
+      
+      echo "Found Listener ARN: $LISTENER_ARN"
+      
+      echo "Updating tfvars..."
+      sed -i "s|^\s*nlb_listener_arn.*|nlb_listener_arn = \"$LISTENER_ARN\"|g" nonprod.tfvars
+      
+      echo "Running Terraform Apply..."
+      terraform init \
+         -backend-config="bucket=$(TF_BUCKET_NAME)" \
+         -backend-config="key=$(TF_STATE_KEY)" \
+         -backend-config="region=$(AWS_REGION)" \
+         -reconfigure
+
+      terraform apply -var-file="nonprod.tfvars" -auto-approve
+      
+      # GitOps Push
+      git config --global user.email "alaaynassar7@gmail.com"
+      git config --global user.name "Alaa Nassar"
+      git add nonprod.tfvars
+      git commit -m "chore: update NLB ARN [skip ci]" || echo "No changes"
+      git push https://$(MY_GITHUB_PAT)@github.com/alaaynassar7/end-to-end-devops-project.git HEAD:main
