@@ -27,18 +27,11 @@ jobs:
       scriptType: inline
       inlineScript: |
         set -euo pipefail
-        
-        echo "Connecting to cluster: $(CLUSTER_NAME)..."
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
-        
         APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
-        
         if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
-           echo "##[warning] API Gateway not found by name, trying to get the first one available..."
            APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text)
         fi
-
-        echo "Found API Gateway: $APIGW_URL"
         echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
 
   - task: Docker@2
@@ -71,15 +64,13 @@ jobs:
         set -euo pipefail
         
         cd $(Build.SourcesDirectory)
-        echo "Current Directory: $(pwd)"
         
         CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
         
         if [ -z "$CHART_PATH" ]; then
-          echo "
+          echo "##[error] Chart directory not found!"
           exit 1
         fi
-        echo "Found Chart at: $CHART_PATH"
 
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
