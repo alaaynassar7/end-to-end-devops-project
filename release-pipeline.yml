@@ -25,8 +25,8 @@ jobs:
       containerRegistry: 'alaa-docker'
       repository: $(IMAGE_REPOSITORY)
       command: 'buildAndPush'
-      Dockerfile: 'motivational-app/Dockerfile'
-      buildContext: 'motivational-app'
+      Dockerfile: 'motivational-app/dockerfile' 
+      buildContext: '.' 
       tags: |
         $(Build.BuildId)
         latest
