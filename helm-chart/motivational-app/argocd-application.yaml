@@ -71,15 +71,14 @@ jobs:
         set -euo pipefail
         
         cd $(Build.SourcesDirectory)
-        echo "Current Directory: $(pwd)"
         
-        CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
+        CHART_PATH=$(find . -name "Chart.yaml" -exec dirname {} \; | grep "motivational-app" | head -n 1)
         
         if [ -z "$CHART_PATH" ]; then
-          echo 
+          echo "##[error] Chart.yaml not found in any motivational-app directory!"
           exit 1
         fi
-        echo "Found Chart at: $CHART_PATH"
+        echo "Final Chart Path used: $CHART_PATH"
 
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
