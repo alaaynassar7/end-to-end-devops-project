@@ -27,10 +27,8 @@ jobs:
       scriptType: inline
       inlineScript: |
         set -e
-        # Update kubeconfig to access EKS
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
         
-        # Get API Gateway URL for Cognito integration
         APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
         if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
            APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text)
@@ -48,7 +46,6 @@ jobs:
     inputs:
       targetType: inline
       script: |
-        # Extract credentials for Kubernetes registry secret
         DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
         CONFIG_FILE="$DOCKER_CONFIG/config.json"
         AUTH_STRING=$(python3 -c "import json; data = json.load(open('$CONFIG_FILE')); print(list(data['auths'].values())[0]['auth'])")
@@ -68,10 +65,10 @@ jobs:
         set -e
         set -x
         
-        # 1. Navigate to the root source directory to ensure correct path
+        # 1. Force move to root directory
         cd $(Build.SourcesDirectory)
         
-        # 2. Define the Chart path
+        # 2. Define the exact path
         CHART_PATH="./helm-chart/motivational-app"
         
         # 3. Verify Chart.yaml exists
@@ -81,7 +78,7 @@ jobs:
             exit 1
         fi
 
-        # 4. Create Namespace and Registry Secret
+        # 4. Create Namespace and Secrets
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
         kubectl create secret docker-registry regcred \
@@ -91,26 +88,27 @@ jobs:
           --docker-password="$(DOCKER_PASSWORD)" \
           --docker-email=alaaynassar7@gmail.com 
 
-        # 5. Create dynamic values file for Ingress/Cognito
+        # 5. Create dynamic values for Cognito/Ingress
         cat <<EOF > dynamic-values.yaml
         ingress:
           annotations:
             nginx.ingress.kubernetes.io/auth-signin: "$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri"
         EOF
 
-        # 6. Run Helm Upgrade
-        # --force used to overwrite any previous conflicting releases
-        # service ports set to 5000 to match Flask application
-        # --wait removed to prevent pipeline timeout during pod startup
+        # 6. CRITICAL FIX: Uninstall old conflicting release first
+        # This resolves the exit code 1 issue by cleaning the cluster state
+        helm uninstall motivational-app --namespace alaa || echo "No old release to delete"
+
+        # 7. Install/Upgrade with Port 5000 overrides
         helm upgrade --install motivational-app "$CHART_PATH" \
           --namespace alaa \
           --set image.tag="latest" \
           --set service.port=5000 \
           --set service.targetPort=5000 \
           -f dynamic-values.yaml \
-          --force --debug
+          --debug
 
-        # 7. Restart Deployment to ensure it pulls the latest image
+        # 8. Final Restart
         kubectl rollout restart deployment -n alaa -l app.kubernetes.io/instance=motivational-app
     env:
       DOCKER_PASSWORD: $(DOCKER_PASSWORD)
