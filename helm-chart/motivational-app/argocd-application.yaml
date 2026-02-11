@@ -68,7 +68,7 @@ jobs:
         CHART_PATH=$(find . -name "motivational-app" -type d | head -n 1)
         
         if [ -z "$CHART_PATH" ]; then
-          echo "##[error] Chart directory not found!"
+          echo 
           exit 1
         fi
 
