@@ -5,7 +5,8 @@ pr: none
 variables:
   AWS_SERVICE_CONNECTION: 'aws-alaa-2'
   AWS_REGION: 'eu-north-1' 
-  CLUSTER_NAME: 'eks-platform-nonprod-v2-cluster'
+  CLUSTER_NAME: 'alaa-devops-project-cluster'
+  API_GATEWAY_NAME: 'alaa-devops-project-api'
 
 pool:
   name: 'Self hosted pools'
@@ -27,31 +28,25 @@ jobs:
       inlineScript: |
         set -euo pipefail
         
-        if [ -z "$(CLUSTER_NAME)" ]; then
-          echo "Error: CLUSTER_NAME variable is not set."
-          exit 1
-        fi
-
-        echo "Checking if cluster $(CLUSTER_NAME) exists..."
-        if ! aws eks describe-cluster --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)" >/dev/null 2>&1; then
-           echo "##[warning]Cluster $(CLUSTER_NAME) not found. Skipping kubeconfig setup."
-           echo "##vso[task.setvariable variable=CLUSTER_EXISTS]false"
-           exit 0
-        fi
-
         echo "Connecting to cluster: $(CLUSTER_NAME)..."
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
         
-        APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='eks-platform-nonprod-v2-api-v2-nonprod'].ApiEndpoint" --output text)
+        APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
+        
+        if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
+           echo "##[warning] API Gateway not found by name, trying to get the first one available..."
+           APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text)
+        fi
+
         echo "Found API Gateway: $APIGW_URL"
         echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
-        echo "##vso[task.setvariable variable=CLUSTER_EXISTS]true"
 
   - task: Docker@2
     displayName: Docker Login
     inputs:
       command: login
       containerRegistry: 'alaa-docker'
+
   - task: Bash@3
     displayName: Export Docker Credentials
     inputs:
@@ -75,10 +70,7 @@ jobs:
       inlineScript: |
         set -euo pipefail
         
-        if [ "$(CLUSTER_EXISTS)" == "false" ]; then
-           exit 0
-        fi
-
+        kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
         kubectl create secret docker-registry regcred \
           --namespace alaa \
@@ -87,18 +79,13 @@ jobs:
           --docker-password="$(DOCKER_PASSWORD)" \
           --docker-email=alaaynassar7@gmail.com 
         
-        if ! command -v helm &> /dev/null; then
-            curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
-        fi
-
         printf "ingress:\n  annotations:\n    nginx.ingress.kubernetes.io/auth-signin: \"$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri\"\n" > dynamic-values.yaml
 
         helm upgrade --install motivational-app ./helm-chart/motivational-app \
-          --namespace alaa --create-namespace \
+          --namespace alaa \
           --set image.tag="latest" \
           -f dynamic-values.yaml \
-          --wait --timeout 10m \
-          --debug
+          --wait --timeout 10m
 
         kubectl rollout restart deployment -n alaa -l app.kubernetes.io/instance=motivational-app
     env:
