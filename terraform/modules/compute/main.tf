@@ -6,6 +6,7 @@ locals {
   }
 }
 
+# 1. تعريف الـ Role الخاص بالكلاستر
 resource "aws_iam_role" "eks_cluster" {
   name = "${var.project_name}-cluster-role"
   assume_role_policy = jsonencode({
@@ -22,9 +23,10 @@ resource "aws_iam_role" "eks_cluster" {
 
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.eks_cluster.name
+  role        = aws_iam_role.eks_cluster.name
 }
 
+# 2. إنشاء الـ EKS Cluster
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
   role_arn = aws_iam_role.eks_cluster.arn
@@ -66,17 +68,17 @@ resource "aws_iam_role" "eks_nodes" {
 
 resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.eks_nodes.name
+  role        = aws_iam_role.eks_nodes.name
 }
 
 resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.eks_nodes.name
+  role        = aws_iam_role.eks_nodes.name
 }
 
 resource "aws_iam_role_policy_attachment" "eks_ec2_container_registry_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_nodes.name
+  role        = aws_iam_role.eks_nodes.name
 }
 
 resource "aws_eks_node_group" "main" {
@@ -108,31 +110,22 @@ resource "aws_eks_node_group" "main" {
   )
 }
 
+
 # resource "aws_eks_access_entry" "root" {
 #   cluster_name  = aws_eks_cluster.main.name
 #   principal_arn = var.principal_arn
 #   type          = "STANDARD"
 # }
+
 resource "aws_eks_access_policy_association" "root" {
   cluster_name  = aws_eks_cluster.main.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-    principal_arn = var.principal_arn 
+  principal_arn = var.principal_arn
 
   access_scope {
     type = "cluster"
   }
 }
-
-resource "kubernetes_namespace_v1" "ingress_nginx" {
-  metadata {
-    name = "ingress-nginx"
-  }
-  depends_on = [
-    aws_eks_cluster.main
-  ]
-}
-
-# --- IRSA Code (Moved inside here) ---
 
 data "tls_certificate" "eks_oidc" {
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
@@ -145,72 +138,14 @@ resource "aws_iam_openid_connect_provider" "eks" {
   tags            = var.tags
 }
 
-locals {
-  oidc_issuer_url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-data "aws_iam_policy_document" "irsa_assume" {
-  for_each = var.irsa_roles
-
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(local.oidc_issuer_url, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(local.oidc_issuer_url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:${each.value.namespace}:${each.value.service_account_name}"]
-    }
-  }
-}
-
-resource "aws_iam_role" "irsa" {
-  for_each = var.irsa_roles
-
-  name               = "${aws_eks_cluster.main.name}-${each.key}-irsa"
-  assume_role_policy = data.aws_iam_policy_document.irsa_assume[each.key].json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "irsa" {
-  for_each = {
-    for item in flatten([
-      for k, v in var.irsa_roles : [
-        for arn in v.policy_arns : {
-          key        = "${k}|${arn}"
-          role_key   = k
-          policy_arn = arn
-        }
-      ]
-    ]) : item.key => item
-  }
-
-  role       = aws_iam_role.irsa[each.value.role_key].name
-  policy_arn = each.value.policy_arn
-}
-
-# --- EBS CSI Driver ---
-
 data "aws_iam_policy_document" "ebs_csi_irsa_assume" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     effect  = "Allow"
-
     principals {
       type        = "Federated"
       identifiers = [aws_iam_openid_connect_provider.eks.arn]
     }
-
     condition {
       test     = "StringEquals"
       variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
@@ -227,12 +162,11 @@ data "aws_iam_policy_document" "ebs_csi_irsa_assume" {
 resource "aws_iam_role" "ebs_csi_driver" {
   name               = "${var.project_name}-ebs-csi-role"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_irsa_assume.json
-  tags               = var.tags
 }
 
-resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy_irsa" {
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-  role       = aws_iam_role.ebs_csi_driver.name
+  role        = aws_iam_role.ebs_csi_driver.name
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
@@ -243,7 +177,5 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   resolve_conflicts_on_update = "OVERWRITE"
   service_account_role_arn    = aws_iam_role.ebs_csi_driver.arn
 
-  depends_on = [
-    aws_eks_node_group.main
-  ]
+  depends_on = [aws_eks_node_group.main]
 }
