@@ -2,7 +2,6 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  # Updated name from temp-chart to motivational-app
   name: {{ include "motivational-app.fullname" . }}
   labels:
     {{- include "motivational-app.labels" . | nindent 4 }}
@@ -10,7 +9,6 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    # This must match the Deployment name we updated earlier
     name: {{ include "motivational-app.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}

@@ -2,7 +2,6 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  # Updated from temp-chart to motivational-app
   name: {{ include "motivational-app.fullname" . }}
   labels:
     {{- include "motivational-app.labels" . | nindent 4 }}
@@ -36,7 +35,6 @@ spec:
             {{- end }}
             backend:
               service:
-                # This must match the Service name
                 name: {{ include "motivational-app.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}

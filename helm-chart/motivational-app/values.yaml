@@ -1,13 +1,9 @@
 # Default values for motivational-app.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 replicaCount: 1
 
 image:
   repository: alaaynassar7/motivational-app
   pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
 imagePullSecrets:
@@ -17,68 +13,52 @@ nameOverride: ""
 fullnameOverride: "motivational-app"
 
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
   name: ""
 
 podAnnotations: {}
 podLabels: {}
 
 podSecurityContext: {}
-  # fsGroup: 2000
 
 securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
 
 service:
   type: ClusterIP
   port: 80
-  # Flask runs on port 5000
-  targetPort: 5000
+  targetPort: 5000  # Default Flask port
 
 ingress:
   enabled: true
   className: "nginx"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    # Internal auth check URL (standard within the cluster)
-    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.ingress-nginx.svc.cluster.local/oauth2/auth"
-    # Note: auth-signin is injected dynamically by the Azure Pipeline
+    # This will be overwritten by the pipeline dynamically, but we keep it as a placeholder
+    nginx.ingress.kubernetes.io/auth-signin: "placeholder"
   hosts:
-    - host: ""
+    - host: 
       paths:
         - path: /
           pathType: Prefix
   tls: []
 
-httpRoute:
-  enabled: false
-  annotations: {}
-  parentRefs:
-  - name: gateway
-    sectionName: http
-  hostnames:
-  - chart-example.local
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /headers
+resources: 
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
-resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+volumes: []
+volumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}

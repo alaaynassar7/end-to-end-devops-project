@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "temp-chart.name" -}}
+{{- define "motivational-app.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "temp-chart.fullname" -}}
+{{- define "motivational-app.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "temp-chart.chart" -}}
+{{- define "motivational-app.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "temp-chart.labels" -}}
-helm.sh/chart: {{ include "temp-chart.chart" . }}
-{{ include "temp-chart.selectorLabels" . }}
+{{- define "motivational-app.labels" -}}
+helm.sh/chart: {{ include "motivational-app.chart" . }}
+{{ include "motivational-app.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "temp-chart.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "temp-chart.name" . }}
+{{- define "motivational-app.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "motivational-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "temp-chart.serviceAccountName" -}}
+{{- define "motivational-app.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "temp-chart.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "motivational-app.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
