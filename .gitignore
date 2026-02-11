@@ -1,0 +1,87 @@
+# ====================================================================
+# Terraform & Binaries
+# ====================================================================
+# Local .terraform directory
+.terraform/
+
+# .tfstate files (CRITICAL: Never commit state files, use S3 backend)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which are likely to contain sensitive data,
+# such as password, private keys, and other secrets.
+*.tfvars
+
+# !!! EXCEPTION: Allow specific environment variable files if they 
+# contain ONLY non-sensitive config (CIDRs, Region, Project Name).
+# If you put secrets in them, remove the '!' lines below.
+!nonprod.tfvars
+!prod.tfvars
+
+# Ignore override files as they are usually local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform Plan files
+*.tfplan
+tfplan
+
+# ====================================================================
+# Python (Motivational App)
+# ====================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+myenv/
+.venv/
+
+# Flask stuff
+instance/
+.webassets-cache
+
+# ====================================================================
+# AWS & Security
+# ====================================================================
+# AWS CLI credentials (Never commit these!)
+.aws/
+aws_credentials
+
+# Private Keys
+*.pem
+*.key
+*.ppk
+
+# Environment Variables file
+.env
+
+# ====================================================================
+# IDE & OS Files (General Garbage)
+# ====================================================================
+# VS Code
+.vscode/
+
+# IntelliJ / PyCharm
+.idea/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ====================================================================
+# Project Specific
+# ====================================================================
+# Ignore the raw k8s folder if you decided to keep it but don't want to push it
+k8s/
