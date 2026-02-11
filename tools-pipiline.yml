@@ -114,8 +114,7 @@ steps:
         --set controller.admissionWebhooks.enabled=false \
         --wait --timeout 15m
 
-
-# 6. Install OAuth2-Proxy
+# 6. Install OAuth2-Proxy (Sanitized)
 - task: AWSShellScript@1
   displayName: 'Install OAuth2-Proxy'
   inputs:
@@ -126,19 +125,26 @@ steps:
       set -euo pipefail
       
       echo "Deploying OAuth2 Proxy..."
+      
+      CLEAN_CLIENT_ID=$(echo -n "$(COGNITO_CLIENT_ID)" | tr -d '\n' | tr -d '\r')
+      CLEAN_CLIENT_SECRET=$(echo -n "$(COGNITO_CLIENT_SECRET)" | tr -d '\n' | tr -d '\r')
+      CLEAN_COOKIE_SECRET=$(echo -n "$(COOKIE_SECRET)" | tr -d '\n' | tr -d '\r')
+      CLEAN_ISSUER_URL=$(echo -n "$(COGNITO_ISSUER_URL)" | tr -d '\n' | tr -d '\r')
+      CLEAN_APIGW_URL=$(echo -n "$(APIGW_URL)" | tr -d '\n' | tr -d '\r')
+
       helm uninstall oauth2-proxy -n ingress-nginx || true
 
       helm upgrade --install oauth2-proxy oauth2-proxy \
         --repo https://oauth2-proxy.github.io/manifests \
         --namespace ingress-nginx \
         --wait --atomic \
-        --set config.clientID="$(COGNITO_CLIENT_ID)" \
-        --set config.clientSecret="$(COGNITO_CLIENT_SECRET)" \
-        --set config.cookieSecret="$(COOKIE_SECRET)" \
+        --set config.clientID="$CLEAN_CLIENT_ID" \
+        --set config.clientSecret="$CLEAN_CLIENT_SECRET" \
+        --set config.cookieSecret="$CLEAN_COOKIE_SECRET" \
         --set extraArgs.provider="oidc" \
-        --set extraArgs.oidc-issuer-url="$(COGNITO_ISSUER_URL)" \
+        --set extraArgs.oidc-issuer-url="$CLEAN_ISSUER_URL" \
         --set extraArgs.email-domain="gmail.com" \
-        --set extraArgs.redirect-url="$(APIGW_URL)/oauth2/callback" \
+        --set extraArgs.redirect-url="${CLEAN_APIGW_URL}/oauth2/callback" \
         --set ingress.enabled=true \
         --set ingress.className="nginx" \
         --set ingress.path="/oauth2" \
