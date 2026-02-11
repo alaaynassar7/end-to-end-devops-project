@@ -109,11 +109,11 @@ resource "aws_eks_node_group" "main" {
 }
 
 
-# resource "aws_eks_access_entry" "root" {
-#   cluster_name  = aws_eks_cluster.main.name
-#   principal_arn = var.principal_arn
-#   type          = "STANDARD"
-# }
+resource "aws_eks_access_entry" "root" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = var.principal_arn
+  type          = "STANDARD"
+}
 
 resource "aws_eks_access_policy_association" "root" {
   cluster_name  = aws_eks_cluster.main.name
