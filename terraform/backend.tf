@@ -4,6 +4,6 @@ terraform {
     key          = "eks-platform/terraform.tfstate"
     region       = "eu-north-1"
     encrypt      = true
-    use_lockfile = false
+    #use_lockfile = false
   }
 }
