@@ -26,7 +26,7 @@ jobs:
       regionName: $(AWS_REGION)
       scriptType: inline
       inlineScript: |
-        set -euo pipefail
+        set -e
         aws eks update-kubeconfig --name "$(CLUSTER_NAME)" --region "$(AWS_REGION)"
         APIGW_URL=$(aws apigatewayv2 get-apis --query "Items[?Name=='$(API_GATEWAY_NAME)'].ApiEndpoint" --output text)
         if [ -z "$APIGW_URL" ] || [ "$APIGW_URL" == "None" ]; then
@@ -49,8 +49,10 @@ jobs:
         CONFIG_FILE="$DOCKER_CONFIG/config.json"
         AUTH_STRING=$(python3 -c "import json; data = json.load(open('$CONFIG_FILE')); print(list(data['auths'].values())[0]['auth'])")
         DECODED_AUTH=$(echo "$AUTH_STRING" | base64 -d)
-        echo "##vso[task.setvariable variable=DOCKER_USERNAME]$(echo "$DECODED_AUTH" | cut -d: -f1)"
-        echo "##vso[task.setvariable variable=DOCKER_PASSWORD;isSecret=true]$(echo "$DECODED_AUTH" | cut -d: -f2-)"
+        DOCKER_USERNAME=$(echo "$DECODED_AUTH" | cut -d: -f1)
+        DOCKER_PASSWORD=$(echo "$DECODED_AUTH" | cut -d: -f2-)
+        echo "##vso[task.setvariable variable=DOCKER_USERNAME]$DOCKER_USERNAME"
+        echo "##vso[task.setvariable variable=DOCKER_PASSWORD;isSecret=true]$DOCKER_PASSWORD"
 
   - task: AWSShellScript@1
     displayName: Deploy Motivational App (Helm)
@@ -59,16 +61,26 @@ jobs:
       regionName: $(AWS_REGION)
       scriptType: inline
       inlineScript: |
-        set -euo pipefail
+        set -e
+        set -x
         
+        # 1. Force move to root directory to escape TF_DIR
         cd $(Build.SourcesDirectory)
+        echo "Current Directory: $(pwd)"
+        ls -F
+
+        # 2. Define the exact path from your repo structure
+        CHART_PATH="./helm-chart/motivational-app"
         
-        CHART_PATH=$(find . -name "motivational-app" -type d -path "*/helm-chart/*" | head -n 1)
-        
-        if [ -z "$CHART_PATH" ]; then
-          CHART_PATH="./helm-chart/motivational-app"
+        # 3. Verify Chart.yaml exists
+        if [ ! -f "$CHART_PATH/Chart.yaml" ]; then
+            echo "##[error] Chart.yaml NOT found at $CHART_PATH"
+            echo "Listing root directory:"
+            ls -R
+            exit 1
         fi
 
+        # 4. Create Secrets
         kubectl create namespace alaa --dry-run=client -o yaml | kubectl apply -f -
         kubectl delete secret regcred -n alaa --ignore-not-found=true
         kubectl create secret docker-registry regcred \
@@ -77,19 +89,22 @@ jobs:
           --docker-username="$(DOCKER_USERNAME)" \
           --docker-password="$(DOCKER_PASSWORD)" \
           --docker-email=alaaynassar7@gmail.com 
-        
+
+        # 5. Create values file safely
         cat <<EOF > dynamic-values.yaml
         ingress:
           annotations:
             nginx.ingress.kubernetes.io/auth-signin: "$(APIGW_URL)/oauth2/start?rd=\$escaped_request_uri"
         EOF
 
+        # 6. Run Helm Upgrade
         helm upgrade --install motivational-app "$CHART_PATH" \
           --namespace alaa \
           --set image.tag="latest" \
           -f dynamic-values.yaml \
-          --wait --timeout 5m --force --debug
+          --wait --timeout 5m --debug
 
+        # 7. Restart Deployment
         kubectl rollout restart deployment -n alaa -l app.kubernetes.io/instance=motivational-app
     env:
       DOCKER_PASSWORD: $(DOCKER_PASSWORD)
