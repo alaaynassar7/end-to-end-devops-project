@@ -3,12 +3,12 @@ trigger: none
 pr: none
 
 variables:
+  # 1. Link Variable Group (Crucial for DATADOG_API_KEY and TF_DIR)
   - group: 'My Vars'
 
+  # 2. Additional Variables
   - name: AWS_SERVICE_CONNECTION
     value: 'aws-alaa-2'
-  - name: CLUSTER_NAME
-    value: 'alaa-devops-project-cluster'
   
 pool:
   name: 'Self hosted pools'
@@ -52,7 +52,7 @@ steps:
       echo "Updating Kubeconfig for cluster: $(CLUSTER_NAME)..."
       aws eks update-kubeconfig --region $(AWS_REGION) --name $(CLUSTER_NAME)
       
-      # Verify
+      # Verify connection
       kubectl get svc
 
 # 3. Export Terraform Outputs (Modules Support)
@@ -64,7 +64,8 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       set -e
-      # Use TF_DIR from Library (terraform folder)
+      # Use TF_DIR from Library
+      echo "Navigating to Terraform Directory: $(TF_DIR)"
       cd $(TF_DIR)
       
       echo "Initializing Terraform to read outputs..."
@@ -79,12 +80,18 @@ steps:
       COGNITO_CLIENT_SECRET=$(terraform output -raw cognito_client_secret)
       COGNITO_ISSUER_URL=$(terraform output -raw cognito_issuer_url)
       APIGW_URL=$(terraform output -raw api_gateway_url)
+      
+      # Capture Cluster Name from Terraform for Datadog
+      CLUSTER_NAME_TF=$(terraform output -raw cluster_name)
 
+      # Set Pipeline Variables
       echo "##vso[task.setvariable variable=COGNITO_CLIENT_ID;isSecret=true]$COGNITO_CLIENT_ID"
       echo "##vso[task.setvariable variable=COGNITO_CLIENT_SECRET;isSecret=true]$COGNITO_CLIENT_SECRET"
       echo "##vso[task.setvariable variable=COGNITO_ISSUER_URL]$COGNITO_ISSUER_URL"
       echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
-
+      echo "##vso[task.setvariable variable=CLUSTER_NAME]$CLUSTER_NAME_TF"
+      
+      # Set Stable Cookie Secret
       echo "##vso[task.setvariable variable=COOKIE_SECRET;isSecret=true]STABLE_SECRET_V1_FOR_32_BYTE_AES"
 
 # 4. Install Nginx Ingress (NLB)
@@ -107,39 +114,43 @@ steps:
         --set controller.admissionWebhooks.enabled=false \
         --wait --timeout 15m
 
-# 5. Install Datadog (FIXED & CLEANED)
+# 5. Install Datadog (US5 Region & Full Features)
 - task: AWSShellScript@1
-  displayName: 'Install Datadog'
+  displayName: 'Install Datadog (US5)'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
       set -e
-      echo "Starting Datadog Setup..."
+      echo "Starting Datadog Setup for US5..."
       
-      # 1. Clean conflicts
+      # 1. Cleanup old installations and conflicts
       helm uninstall datadog-agent -n alaa || true
       helm uninstall datadog -n datadog || true
       
-      # 2. Delete CRDs to fix ownership errors
+      # Delete CRDs to resolve ownership errors
       kubectl delete crd datadogagents.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogmetrics.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogmonitors.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogslos.datadoghq.com --ignore-not-found=true
       kubectl delete crd datadogdashboards.datadoghq.com --ignore-not-found=true
 
-      # 3. Add Repo
+      # 2. Add Helm Repo
       helm repo add datadog https://helm.datadoghq.com
       helm repo update
 
-      # 4. Install
-      # Using macro $(DATADOG_API_KEY) which is now visible from 'My Vars'
+      # 3. Install with US5 Config
+      echo "Deploying Datadog Agent to US5 Site..."
+      
       helm upgrade --install datadog datadog/datadog \
         --namespace datadog --create-namespace \
         --set datadog.apiKey=$(DATADOG_API_KEY) \
-        --set datadog.site="datadoghq.eu" \
+        --set datadog.site="us5.datadoghq.com" \
+        --set datadog.clusterName="$(CLUSTER_NAME)" \
         --set datadog.kubelet.tlsVerify=false \
+        --set clusterChecks.enabled=true \
+        --set datadog.orchestratorExplorer.enabled=true \
         --wait --timeout 10m
 
 # 6. Install OAuth2-Proxy
@@ -222,7 +233,7 @@ steps:
         --set sonarWebContext=/sonarqube \
         --wait --timeout 10m
 
-# 8. Update Terraform & Dynamic Push
+# 8. Update Terraform & Dynamic Push (Smart Branching)
 - task: AWSShellScript@1
   displayName: 'Link Load Balancer to Terraform'
   inputs:
@@ -259,11 +270,10 @@ steps:
       echo "Applying Terraform Update..."
       terraform apply -var-file="nonprod.tfvars" -auto-approve
 
-      # GitOps Push (To current branch)
+      # GitOps Push (To current branch dynamically)
       git config --global user.email "alaaynassar7@gmail.com"
       git config --global user.name "Alaa Nassar"
       git add nonprod.tfvars
-      git commit -m "chore: update integration_uri with new NLB [skip ci]" || echo "No changes"
-      
+      git commit -m "chore: update integration_uri with new NLB [skip ci]"
       # Pushing to the same branch running this pipeline
       git push origin HEAD:$(Build.SourceBranchName)
