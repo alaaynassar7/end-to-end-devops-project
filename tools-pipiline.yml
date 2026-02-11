@@ -3,13 +3,12 @@ trigger: none
 pr: none
 
 variables:
-  # --- User Constants ---
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
-  AWS_REGION: 'eu-north-1'
-  CLUSTER_NAME: 'alaa-devops-project-cluster'
-  TF_BUCKET_NAME: 'alaa-devops-project-tf-state-v2'
-  TF_STATE_KEY: 'infra/nonprod/terraform.tfstate'
-  TF_DIR: '.'  
+  - group: 'My Vars'
+
+  - name: AWS_SERVICE_CONNECTION
+    value: 'aws-alaa-2'
+  - name: CLUSTER_NAME
+    value: 'alaa-devops-project-cluster'
   
 pool:
   name: 'Self hosted pools'
@@ -56,7 +55,7 @@ steps:
       # Verify
       kubectl get svc
 
-# 3. Export Terraform Outputs (Critical for Modules)
+# 3. Export Terraform Outputs (Modules Support)
 - task: AWSShellScript@1
   displayName: 'Export Infrastructure Outputs'
   inputs:
@@ -65,12 +64,13 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       set -e
+      # Use TF_DIR from Library (terraform folder)
       cd $(TF_DIR)
       
-      # Initialize just to read outputs
+      echo "Initializing Terraform to read outputs..."
       terraform init \
-         -backend-config="bucket=$(TF_BUCKET_NAME)" \
-         -backend-config="key=$(TF_STATE_KEY)" \
+         -backend-config="bucket=$(S3_BUCKET_NAME)" \
+         -backend-config="key=infra/nonprod/terraform.tfstate" \
          -backend-config="region=$(AWS_REGION)" \
          -reconfigure
 
@@ -85,10 +85,9 @@ steps:
       echo "##vso[task.setvariable variable=COGNITO_ISSUER_URL]$COGNITO_ISSUER_URL"
       echo "##vso[task.setvariable variable=APIGW_URL]$APIGW_URL"
 
-      # Cookie Secret for OAuth
       echo "##vso[task.setvariable variable=COOKIE_SECRET;isSecret=true]STABLE_SECRET_V1_FOR_32_BYTE_AES"
 
-# 4. Install Nginx Ingress 
+# 4. Install Nginx Ingress (NLB)
 - task: AWSShellScript@1
   displayName: 'Install Nginx Ingress (NLB)'
   inputs:
@@ -108,7 +107,7 @@ steps:
         --set controller.admissionWebhooks.enabled=false \
         --wait --timeout 15m
 
-# 5. Install Datadog (The Requested Addition)
+# 5. Install Datadog (FIXED & CLEANED)
 - task: AWSShellScript@1
   displayName: 'Install Datadog'
   inputs:
@@ -117,14 +116,25 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       set -e
-      echo "Installing Datadog..."
+      echo "Starting Datadog Setup..."
       
-      # Add Repo
+      # 1. Clean conflicts
+      helm uninstall datadog-agent -n alaa || true
+      helm uninstall datadog -n datadog || true
+      
+      # 2. Delete CRDs to fix ownership errors
+      kubectl delete crd datadogagents.datadoghq.com --ignore-not-found=true
+      kubectl delete crd datadogmetrics.datadoghq.com --ignore-not-found=true
+      kubectl delete crd datadogmonitors.datadoghq.com --ignore-not-found=true
+      kubectl delete crd datadogslos.datadoghq.com --ignore-not-found=true
+      kubectl delete crd datadogdashboards.datadoghq.com --ignore-not-found=true
+
+      # 3. Add Repo
       helm repo add datadog https://helm.datadoghq.com
       helm repo update
 
-      # Install with minimal config
-      # IMPORTANT: Make sure DATADOG_API_KEY is in your Variable Group
+      # 4. Install
+      # Using macro $(DATADOG_API_KEY) which is now visible from 'My Vars'
       helm upgrade --install datadog datadog/datadog \
         --namespace datadog --create-namespace \
         --set datadog.apiKey=$(DATADOG_API_KEY) \
@@ -132,7 +142,7 @@ steps:
         --set datadog.kubelet.tlsVerify=false \
         --wait --timeout 10m
 
-# 6. Install OAuth2-Proxy (Cognito Link)
+# 6. Install OAuth2-Proxy
 - task: AWSShellScript@1
   displayName: 'Install OAuth2-Proxy'
   inputs:
@@ -143,7 +153,6 @@ steps:
       set -euo pipefail
       
       echo "Deploying OAuth2 Proxy..."
-      # Clean stuck releases
       helm uninstall oauth2-proxy -n ingress-nginx || true
 
       helm upgrade --install oauth2-proxy oauth2-proxy \
@@ -164,15 +173,13 @@ steps:
 
 # 7. Install Tools (Vault, Argo, Sonar)
 - task: AWSShellScript@1
-  displayName: 'Install DevOps Tools (Vault, Argo, Sonar)'
+  displayName: 'Install DevOps Tools'
   inputs:
     awsCredentials: '$(AWS_SERVICE_CONNECTION)'
     regionName: '$(AWS_REGION)'
     scriptType: 'inline'
     inlineScript: |
       set -euo pipefail
-      
-      # Using namespace 'alaa-tools' to keep things organized
       NS="alaa-tools"
       kubectl create namespace $NS --dry-run=client -o yaml | kubectl apply -f -
 
@@ -215,7 +222,7 @@ steps:
         --set sonarWebContext=/sonarqube \
         --wait --timeout 10m
 
-# 8. Update Terraform with Load Balancer DNS (Final Link)
+# 8. Update Terraform & Dynamic Push
 - task: AWSShellScript@1
   displayName: 'Link Load Balancer to Terraform'
   inputs:
@@ -224,10 +231,10 @@ steps:
     scriptType: 'inline'
     inlineScript: |
       set -e
+      # Use TF_DIR from Library
       cd $(TF_DIR)
 
       echo "Fetching NLB DNS..."
-      # Loop to wait for LB
       timeout=300
       end=$((SECONDS + timeout))
       while true; do
@@ -243,7 +250,6 @@ steps:
       echo "Updating nonprod.tfvars..."
       NEW_URI="http://$LB_DNS"
       
-      # Update the file safely
       if grep -q "integration_uri" nonprod.tfvars; then
         sed -i "s|integration_uri.*|integration_uri = \"$NEW_URI\"|g" nonprod.tfvars
       else
@@ -253,12 +259,11 @@ steps:
       echo "Applying Terraform Update..."
       terraform apply -var-file="nonprod.tfvars" -auto-approve
 
-      # GitOps Push
-      # GitOps Push
+      # GitOps Push (To current branch)
       git config --global user.email "alaaynassar7@gmail.com"
       git config --global user.name "Alaa Nassar"
-      
       git add nonprod.tfvars
       git commit -m "chore: update integration_uri with new NLB [skip ci]" || echo "No changes"
       
+      # Pushing to the same branch running this pipeline
       git push origin HEAD:$(Build.SourceBranchName)
