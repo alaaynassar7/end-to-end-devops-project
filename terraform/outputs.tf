@@ -1,8 +1,10 @@
+# --- Network Outputs ---
 output "vpc_id" {
   description = "VPC ID"
   value       = module.network.vpc_id
 }
 
+# --- Compute (EKS) Outputs ---
 output "cluster_name" {
   description = "Kubernetes Cluster Name"
   value       = module.compute.cluster_name
@@ -13,6 +15,7 @@ output "cluster_endpoint" {
   value       = module.compute.cluster_endpoint
 }
 
+# --- Integration (API Gateway & Cognito) Outputs ---
 output "api_gateway_url" {
   description = "URL of the API Gateway"
   value       = module.integration.api_gateway_url
@@ -39,12 +42,13 @@ output "cognito_issuer_url" {
   value       = module.integration.cognito_issuer_url
 }
 
-output "nlb_dns_name" {
-  description = "The DNS name of the Network Load Balancer"
-  value       = var.nlb_dns_name
-}
-
 output "cognito_login_url" {
   description = "Direct link to the Cognito Hosted UI Login page"
   value       = module.integration.cognito_login_url
+}
+
+# --- Feedback Loop Output ---
+output "nlb_dns_name" {
+  description = "The DNS name of the Network Load Balancer"
+  value       = var.nlb_dns_name
 }
