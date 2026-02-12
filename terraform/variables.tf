@@ -1,63 +1,37 @@
 variable "aws_region" {
-  description = "The AWS Region to deploy the cluster into"
+  description = "AWS Region"
   default     = "us-east-2"
 }
 
-variable "project_name" {
-  description = "Name prefix for resources"
-  default     = "alaa-devops-final"
-}
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "vpc_cidr" { type = string }
+variable "public_cidrs" { type = list(string) }
+variable "private_cidrs" { type = list(string) }
+variable "azs" { type = list(string) }
 
-variable "vpc_cidr" {
-  description = "The CIDR block for the VPC"
-  type        = string
-}
-
-variable "cluster_version" {
-  description = "Kubernetes version for the EKS Cluster"
-  type        = string
-}
-
-variable "instance_type" {
-  description = "Instance type for the EKS worker nodes"
-  type        = string
-}
+variable "cluster_version" { type = string }
+variable "instance_type" { type = string }
 
 variable "principal_arn" {
-  description = "IAM Principal ARN to grant cluster access"
+  description = "IAM User/Role ARN for EKS Admin access"
   type        = string
-}
-
-variable "environment" {
-  description = "Deployment environment (prod or dev)"
-  type        = string
-  default     = "prod"
-}
-
-variable "nlb_dns_name" {
-  description = "The DNS name of the Network Load Balancer created by Ingress Controller"
-  type        = string
-  default     = "http://example.com"
 }
 
 variable "nlb_listener_arn" {
-  description = "The ARN of the Network Load Balancer Listener for VPC Link"
+  description = "ARN of the NLB Listener (passed dynamically)"
+  type        = string
+  default     = ""
+}
+
+variable "nlb_dns_name" {
+  description = "DNS name of the NLB (passed dynamically)"
   type        = string
   default     = ""
 }
 
 variable "tags" {
-  description = "A map of tags to add to all resources"
+  description = "Common Tags"
   type        = map(string)
   default     = {}
-}
-
-variable "irsa_roles" {
-  description = "Map of IRSA roles to create"
-  type = map(object({
-    namespace            = string
-    service_account_name = string
-    policy_arns          = list(string)
-  }))
-  default = {}
 }

@@ -29,11 +29,9 @@ resource "aws_cognito_user_pool_client" "client" {
 
   generate_secret = true
 
-  
-  
-  callback_urls = ["https://example.com/oauth2/callback"] # Placeholder to allow creation
-  logout_urls   = ["https://example.com/"]                # Placeholder
-  
+  callback_urls = ["${var.callback_url}/oauth2/callback"]
+  logout_urls   = ["${var.callback_url}/"]
+   
   supported_identity_providers = ["COGNITO"]
 
   allowed_oauth_flows_user_pool_client = true
@@ -46,10 +44,7 @@ resource "aws_cognito_user_pool_client" "client" {
     "ALLOW_USER_SRP_AUTH",
     "ALLOW_ADMIN_USER_PASSWORD_AUTH"
   ]
-  
-  lifecycle {
-    ignore_changes = [callback_urls, logout_urls] 
-  }
+   
 }
 
 resource "aws_cognito_user_pool_domain" "main" {

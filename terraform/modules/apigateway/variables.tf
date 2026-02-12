@@ -1,10 +1,9 @@
-variable "project_name" { type = string }
-variable "environment" { type = string }
-variable "aws_region" { type = string }
-variable "vpc_id" { type = string }
+variable "project_name" {}
+variable "environment" {}
+variable "vpc_id" {}
 variable "private_subnets" { type = list(string) }
-variable "cluster_security_group" { type = string }
-variable "nlb_listener_arn" { type = string }
-variable "cognito_user_pool_id" { type = string }
-variable "cognito_client_id" { type = string }
-variable "cognito_issuer_url" { type = string }
+variable "cluster_security_group" {}
+variable "nlb_listener_arn" { default = "" }
+variable "cognito_user_pool_id" {}
+variable "cognito_client_id" {}
+variable "cognito_issuer_url" {}

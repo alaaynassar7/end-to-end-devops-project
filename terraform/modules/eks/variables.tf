@@ -1,10 +1,11 @@
-variable "project_name" { type = string }
-variable "environment" { type = string }
-variable "vpc_id" { type = string }
+variable "project_name" {}
+variable "cluster_version" {}
+variable "vpc_id" {}
 variable "public_subnets" { type = list(string) }
 variable "private_subnets" { type = list(string) }
-variable "cluster_version" { type = string }
-variable "instance_type" { type = string }
-variable "principal_arn" { type = string }
-variable "tags" { type = map(string) }
-variable "irsa_roles" { type = any }
+variable "instance_type" {}
+variable "environment" {}
+variable "principal_arn" {
+  description = "ARN of the user/role to get admin access to EKS"
+  type        = string
+}

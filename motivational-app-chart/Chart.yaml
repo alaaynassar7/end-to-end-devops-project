@@ -1,6 +1,9 @@
 apiVersion: v2
 name: motivational-app
-description: A Helm chart for Alaa's Motivational App
+description: Helm chart for the Motivational Flask Application
 type: application
-version: 0.1.0
+version: 1.0.0
 appVersion: "1.0.0"
+maintainers:
+  - name: Alaa Nassar
+    email: alaaynassar7@gmail.com
