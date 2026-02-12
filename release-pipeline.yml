@@ -1,14 +1,13 @@
 name: $(Date:yyyyMMdd)$(Rev:.r)-Release
-
 trigger: none
 pr: none
 
 variables:
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2' 
+  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
   AWS_REGION: 'us-east-2'
-  CLUSTER_NAME: 'alaa-devops-project-cluster'
   IMAGE_REPOSITORY: 'alaaynassar7/motivational-app'
 
+# Pool Configuration (Self-Hosted Agent)
 pool:
   name: 'Self hosted pools'
   demands:
@@ -16,40 +15,18 @@ pool:
 
 jobs:
 - job: Release
-  displayName: 'Build, Push and Deploy'
+  displayName: 'Build and Release Docker Image'
   steps:
   - checkout: self
 
+  # 1. Build and Push (Does not need Cluster Access)
   - task: Docker@2
-    displayName: 'Build and Push Docker Image'
+    displayName: Build and Push Docker Image
     inputs:
-      containerRegistry: 'alaa-docker' 
+      containerRegistry: 'alaa-docker'
       repository: $(IMAGE_REPOSITORY)
       command: 'buildAndPush'
-
-      Dockerfile: 'motivational-app/dockerfile' 
-      buildContext: 'motivational-app'
+      Dockerfile: '**/Dockerfile'
       tags: |
         $(Build.BuildId)
         latest
-
-  - task: AWSShellScript@1
-    displayName: 'Deploy to ArgoCD'
-    inputs:
-      awsCredentials: $(AWS_SERVICE_CONNECTION)
-      regionName: $(AWS_REGION)
-      scriptType: inline
-      inlineScript: |
-        set -e
-        echo "Updating Kubeconfig for Cluster: $(CLUSTER_NAME)..."
-        aws eks update-kubeconfig --name $(CLUSTER_NAME) --region $(AWS_REGION)
-        
-        if [ -f "argocd-application.yaml" ]; then
-          echo "Applying ArgoCD Application Manifest..."
-          kubectl apply -f argocd-application.yaml
-        else
-          echo "##[error] argocd-application.yaml not found in root directory!"
-          exit 1
-        fi
-        
-        echo "Release completed successfully! ArgoCD is now syncing the latest image."

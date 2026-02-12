@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "project_name" {
   description = "Name prefix for resources"
-  default     = "alaa-devops-project"
+  default     = "alaa-devops-final"
 }
 
 variable "vpc_cidr" {

@@ -6,6 +6,7 @@ locals {
   }
 }
 
+# --- Cluster Role ---
 resource "aws_iam_role" "eks_cluster" {
   name = "${var.project_name}-cluster-role"
   assume_role_policy = jsonencode({
@@ -25,13 +26,14 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster.name
 }
 
+# --- The Cluster ---
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
   role_arn = aws_iam_role.eks_cluster.arn
   version  = var.cluster_version
 
   vpc_config {
-    subnet_ids              = concat(var.public_subnet_ids, var.private_subnet_ids)
+    subnet_ids              = concat(var.public_subnets, var.private_subnets)
     endpoint_public_access  = true
     endpoint_private_access = true
   }
@@ -50,8 +52,10 @@ resource "aws_eks_cluster" "main" {
   }
 }
 
+# --- Worker Node Role ---
 resource "aws_iam_role" "eks_nodes" {
   name = "${var.project_name}-node-role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -79,11 +83,12 @@ resource "aws_iam_role_policy_attachment" "eks_ec2_container_registry_readonly" 
   role       = aws_iam_role.eks_nodes.name
 }
 
+# --- Managed Node Group ---
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "general"
   node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = var.private_subnet_ids
+  subnet_ids      = var.private_subnets
 
   scaling_config {
     desired_size = local.instance_count
@@ -108,6 +113,7 @@ resource "aws_eks_node_group" "main" {
   )
 }
 
+# --- Access Entry ---
 resource "aws_eks_access_entry" "root" {
   cluster_name  = aws_eks_cluster.main.name
   principal_arn = var.principal_arn
@@ -124,17 +130,7 @@ resource "aws_eks_access_policy_association" "root" {
   }
 }
 
-resource "kubernetes_namespace_v1" "ingress_nginx" {
-  metadata {
-    name = "ingress-nginx"
-  }
-  depends_on = [
-    aws_eks_cluster.main
-  ]
-}
-
-# --- IRSA Code (Moved inside here) ---
-
+# --- OIDC / IRSA Logic (From irsa.tf) ---
 data "tls_certificate" "eks_oidc" {
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }
@@ -200,8 +196,7 @@ resource "aws_iam_role_policy_attachment" "irsa" {
   policy_arn = each.value.policy_arn
 }
 
-# --- EBS CSI Driver ---
-
+# --- EBS CSI Driver IRSA & Addon ---
 data "aws_iam_policy_document" "ebs_csi_irsa_assume" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -246,5 +241,14 @@ resource "aws_eks_addon" "ebs_csi_driver" {
 
   depends_on = [
     aws_eks_node_group.main
+  ]
+}
+
+resource "kubernetes_namespace_v1" "ingress_nginx" {
+  metadata {
+    name = "ingress-nginx"
+  }
+  depends_on = [
+    aws_eks_cluster.main
   ]
 }

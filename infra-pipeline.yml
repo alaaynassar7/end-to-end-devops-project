@@ -2,10 +2,11 @@ name: $(Date:yyyyMMdd)$(Rev:.r)-Infrastructure
 trigger: none
 pr: none
 
+# Pool Configuration as requested
 pool:
   name: 'Self hosted pools'
   demands:
-   - Agent.Name -equals alaaynassar-VMware
+    - Agent.Name -equals alaaynassar-VMware
 
 parameters:
   - name: env
@@ -14,24 +15,21 @@ parameters:
     default: nonprod
     values: [nonprod, prod]
 
-  - name: action
-    displayName: Action to Perform
-    type: string
-    default: plan
-    values:
-      - plan
-      - apply
-      - destroy
+  - name: destroy
+    displayName: Destroy
+    type: boolean
+    default: false
 
 variables:
-  TF_DIR: 'terraform' 
+  # Updated based on your screenshots
+  TF_DIR: 'terraform'
   TF_VAR_FILE: '${{ parameters.env }}.tfvars'
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2' 
+  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
   AWS_REGION: 'us-east-2'
 
 jobs:
 - job: Infrastructure
-  displayName: 'Infrastructure Management'
+  displayName: 'Infrastructure Provisioning (VPC, EKS, Cognito, APIGW)'
   timeoutInMinutes: 120
   steps:
   - checkout: self
@@ -53,7 +51,7 @@ jobs:
         terraform init
 
   - task: AWSShellScript@1
-    displayName: Terraform Execute Action
+    displayName: Terraform Apply or Destroy
     inputs:
       awsCredentials: $(AWS_SERVICE_CONNECTION)
       regionName: $(AWS_REGION)
@@ -62,26 +60,56 @@ jobs:
         set -euo pipefail
         cd "$(TF_DIR)"
         
-        ACTION="${{ parameters.action }}"
-        
-        if [ "$ACTION" == "plan" ]; then
-          echo "Running Terraform Plan..."
-          terraform plan -var-file="$(TF_VAR_FILE)"
+        # ATTEMPT FORCE UNLOCK (Safeguard)
+        echo "Attempting to force unlock state... (Skipped: Hardcoded ID removed)"
+        # terraform force-unlock -force <LOCK_ID>
+
+        if [ "${{ parameters.destroy }}" = "True" ]; then
+          echo "Running Pre-Destroy Cleanup (AWS CLI Method)..."
           
-        elif [ "$ACTION" == "apply" ]; then
-          echo "Running Terraform Apply..."
-          terraform apply -auto-approve -var-file="$(TF_VAR_FILE)"
-          
-        elif [ "$ACTION" == "destroy" ]; then
-          echo "Cleaning up Cloud Resources before Destroy..."
-          VPC_ID="$(terraform output -raw vpc_id || echo "")"
-          if [ -n "$VPC_ID" ]; then
-            ELB_ARNS=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
-            for arn in $ELB_ARNS; do
-              aws elbv2 delete-load-balancer --load-balancer-arn "$arn"
-            done
-            sleep 30
+          # 1. Get VPC ID from Terraform (Critical for filtering)
+          # We fetch ID to only delete LBs inside THIS specific VPC to be safe
+          if ! VPC_ID=$(terraform output -raw vpc_id 2>/dev/null); then
+             echo "Could not fetch VPC ID from state. Skipping LB cleanup."
+          else
+             echo "Target VPC ID: $VPC_ID"
+             
+             # 2. Delete Classic ELBs in VPC
+             echo "Checking for Classic ELBs..."
+             ELB_NAMES=$(aws elb describe-load-balancers --region $(AWS_REGION) --query "LoadBalancerDescriptions[?VPCId=='$VPC_ID'].LoadBalancerName" --output text)
+             if [ -n "$ELB_NAMES" ]; then
+               for elb in $ELB_NAMES; do
+                 echo "Deleting Classic ELB: $elb"
+                 aws elb delete-load-balancer --region $(AWS_REGION) --load-balancer-name "$elb"
+               done
+             else
+               echo "No Classic ELBs found."
+             fi
+
+             # 3. Delete ELBv2 (ALB/NLB) in VPC
+             echo "Checking for V2 Load Balancers (ALB/NLB)..."
+             ELB_ARNS=$(aws elbv2 describe-load-balancers --region $(AWS_REGION) --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
+             if [ -n "$ELB_ARNS" ]; then
+               for arn in $ELB_ARNS; do
+                 echo "Deleting ELBv2: $arn"
+                 aws elbv2 delete-load-balancer --region $(AWS_REGION) --load-balancer-arn "$arn"
+               done
+               
+               # Wait for them to disappear to free up ENIs
+               echo "Waiting for ELBv2 deletion..."
+               sleep 15
+             else
+               echo "No V2 Load Balancers found."
+             fi
+             
+             echo "Waiting 30 seconds for AWS cleanup..."
+             sleep 30
           fi
+
           echo "Running Terraform Destroy..."
           terraform destroy -auto-approve -var-file="$(TF_VAR_FILE)" -lock=false
+          exit 0
         fi
+
+        echo "Running Terraform Apply..."
+        terraform apply -auto-approve -var-file="$(TF_VAR_FILE)"
