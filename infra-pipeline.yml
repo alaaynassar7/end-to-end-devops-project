@@ -24,8 +24,8 @@ parameters:
 variables:
   TF_DIR: 'terraform'
   TF_VAR_FILE: '${{ parameters.env }}.tfvars'
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
-  AWS_REGION: 'us-east-2'
+  AWS_SERVICE_CONNECTION: 'alaa-s'
+  AWS_REGION: 'us-east-1'
 
 jobs:
 - job: Infrastructure

@@ -3,8 +3,8 @@ trigger: none
 pr: none
 
 variables:
-  AWS_SERVICE_CONNECTION: 'aws-alaa-2'
-  AWS_REGION: 'us-east-2'
+  AWS_SERVICE_CONNECTION: 'alaa-s'
+  AWS_REGION: 'us-east-1'
   IMAGE_REPOSITORY: 'alaaynassar7/motivational-app'
 
 # Pool Configuration (Self-Hosted Agent)

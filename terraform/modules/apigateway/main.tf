@@ -2,11 +2,11 @@ resource "aws_apigatewayv2_api" "main" {
   name          = "${var.project_name}-api-v2-${var.environment}"
   protocol_type = "HTTP"
   description   = "HTTP API Gateway with JWT Auth"
-tags = {
+  tags = {
     Project     = var.project_name
     Environment = var.environment
   }
-  }
+}
 
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
@@ -28,12 +28,13 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
   name             = "CognitoJWT"
   jwt_configuration {
     audience = [var.cognito_client_id]
-    issuer   = var.cognito_issuer_url
+    # Building issuer here to break circular dependency
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${var.cognito_user_pool_id}"
   }
 }
 
 resource "aws_apigatewayv2_integration" "nlb_proxy" {
-  count            = var.nlb_listener_arn == "" ? 0 : 1
+  count = var.nlb_listener_arn == "" ? 0 : 1
   api_id           = aws_apigatewayv2_api.main.id
   integration_type = "HTTP_PROXY"
   integration_uri  = var.nlb_listener_arn
@@ -48,6 +49,8 @@ resource "aws_apigatewayv2_route" "default" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /{proxy+}" 
   target    = "integrations/${aws_apigatewayv2_integration.nlb_proxy[0].id}"
+  
+  # Unleash these once you want to enforce authentication
   # authorization_type = "JWT"
   # authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
 }

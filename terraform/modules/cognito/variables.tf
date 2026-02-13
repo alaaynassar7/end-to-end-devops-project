@@ -1,21 +1,30 @@
 variable "project_name" {
-  type = string
+  type        = string
+  description = "Project name for resource naming"
 }
 
 variable "environment" {
-  type = string
+  type        = string
+  description = "Environment (e.g., prod, nonprod)"
 }
 
 variable "aws_region" {
-  type = string
+  type        = string
+  description = "AWS region for deployment"
+}
+
+variable "api_endpoint" {
+  type        = string
+  description = "The HTTPS endpoint from API Gateway used for Cognito callbacks"
 }
 
 variable "callback_url" {
-  description = "Dynamic URL passed from root/pipeline"
+  description = "Fallback/Dynamic URL passed from root/pipeline"
   type        = string
+  default     = ""
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  type        = map(string)
+  default     = {}
 }
