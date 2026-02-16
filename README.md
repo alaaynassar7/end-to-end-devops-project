@@ -156,5 +156,6 @@ The application is a lightweight Flask web server:
 <img width="1721" height="883" alt="0" src="https://github.com/user-attachments/assets/5d308b60-7c43-4189-af94-f41645aad7e3" />
 3. Sonar qube
 <img width="1600" height="711" alt="image" src="https://github.com/user-attachments/assets/acc9142d-255a-42e8-9b9b-cbee0ecc11f5" />
----
-*Created by Alaa Nassar*
+
+Created by Alaa Nassar
+
