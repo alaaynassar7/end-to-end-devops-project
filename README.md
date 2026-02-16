@@ -148,25 +148,13 @@ The application is a lightweight Flask web server:
 ## 📸 Application Screenshots
 1. **App + MongoDb**
 <img width="1600" height="876" alt="image" src="https://github.com/user-attachments/assets/2dc0cf5e-0af5-40c4-8f5e-f880610c54b3" />
----
 <img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/8cb28a90-d005-4449-bf0e-41652e015ce4" />
-
----
 <img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/1c2327f9-134a-4099-816a-470c48aa6d03" />
-
---
 <img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/b51094a9-137e-448b-863a-1c61f0b73e64" />
-
----
 <img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/59997eb7-c391-468c-a785-0c25a84207c0" />
-
----
-2. **Data dog**
+2. Data dog
 <img width="1721" height="883" alt="0" src="https://github.com/user-attachments/assets/5d308b60-7c43-4189-af94-f41645aad7e3" />
----
-2. **Sonar qube**
+3. Sonar qube
 <img width="1600" height="711" alt="image" src="https://github.com/user-attachments/assets/acc9142d-255a-42e8-9b9b-cbee0ecc11f5" />
-
-
 ---
 *Created by Alaa Nassar*
