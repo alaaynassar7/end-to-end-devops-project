@@ -1,5 +1,4 @@
 # End-to-End DevOps Project 🚀
-
 ![AWS](https://img.shields.io/badge/AWS-EKS-orange?style=for-the-badge&logo=amazon-aws)
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-purple?style=for-the-badge&logo=terraform)
 ![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-CI%2FCD-blue?style=for-the-badge&logo=azure-devops)
@@ -18,24 +17,6 @@ The project demonstrates a production-ready workflow using **Infrastructure as C
 *   **Security First**: Secrets managed by HashiCorp Vault; Authentication via OAuth2 & Cognito.
 *   **Quality Assurance**: Code analysis integrated via SonarQube.
 *   **Observability**: Real-time monitoring and logging with Datadog.
-
----
-
-## 🏗️ Architecture
-<img width="1144" height="974" alt="1_-ft05Aq5c-rlFL7buOjCtA" src="https://github.com/user-attachments/assets/8ba67ee2-7fc2-4a2c-af27-e10eea14069b" />
-
----
-
-<img width="1144" height="974" alt="aws-private-lb-diagram" src="https://github.com/user-attachments/assets/495a6678-5d71-4503-bcb4-6752408d60b5" />
-
----
-<img width="1144" height="974" alt="roundtrip" src="https://github.com/user-attachments/assets/8dd805f0-5c23-414c-88fd-6fd0a4597aba" />
-
----
-<img width="1144" height="974" alt="4" src="https://github.com/user-attachments/assets/0b6aff40-d958-4ec0-bb08-d666ff722174" />
-
----
-<img width="1144" height="974" alt="vpc-example-private-subnets" src="https://github.com/user-attachments/assets/b85f9d92-1551-4bc4-aa5d-35df38969682" />
 
 ---
 
@@ -156,6 +137,25 @@ The application is a lightweight Flask web server:
 <img width="1721" height="883" alt="0" src="https://github.com/user-attachments/assets/5d308b60-7c43-4189-af94-f41645aad7e3" />
 3. Sonar qube
 <img width="1600" height="711" alt="image" src="https://github.com/user-attachments/assets/acc9142d-255a-42e8-9b9b-cbee0ecc11f5" />
+
+## 🏗️ Architecture
+<img width="1144" height="974" alt="1_-ft05Aq5c-rlFL7buOjCtA" src="https://github.com/user-attachments/assets/8ba67ee2-7fc2-4a2c-af27-e10eea14069b" />
+
+---
+
+<img width="1144" height="974" alt="aws-private-lb-diagram" src="https://github.com/user-attachments/assets/495a6678-5d71-4503-bcb4-6752408d60b5" />
+
+---
+<img width="1144" height="974" alt="roundtrip" src="https://github.com/user-attachments/assets/8dd805f0-5c23-414c-88fd-6fd0a4597aba" />
+
+---
+<img width="1144" height="974" alt="4" src="https://github.com/user-attachments/assets/0b6aff40-d958-4ec0-bb08-d666ff722174" />
+
+---
+<img width="1144" height="974" alt="vpc-example-private-subnets" src="https://github.com/user-attachments/assets/b85f9d92-1551-4bc4-aa5d-35df38969682" />
+
+---
+
 
 Created by Alaa Nassar
 
