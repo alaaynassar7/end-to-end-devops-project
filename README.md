@@ -6,6 +6,8 @@
 ![Python](https://img.shields.io/badge/Python-Flask-yellow?style=for-the-badge&logo=python)
 
 ## 📖 Overview
+![Untitled Diagram (4)](https://github.com/user-attachments/assets/cb15686f-a80c-459f-b0e6-f205d5755cd6)
+
 
 Welcome to **Alaa's Hub**, a comprehensive **End-to-End DevOps** project. This repository houses the infrastructure, configuration, and source code for a Python Flask application deployed on **AWS EKS**.
 
